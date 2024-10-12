@@ -1,0 +1,47 @@
+# Options for analysis running.
+run:
+  timeout: 3m # Default: 1m
+
+linters:
+  # Enable all available linters.
+  # Default: false
+  enable-all: true
+  # Disable specific linter
+  # https://golangci-lint.run/usage/linters/#disabled-by-default
+  disable:
+    - cyclop
+    - depguard
+    - err113
+    - execinquery # Deprecated
+    - exhaustruct
+    - exportloopref
+    - funlen
+    - gci
+    - gofumpt
+    - gomnd
+    - ireturn
+    - lll
+    - mnd
+    - paralleltest
+    - perfsprint
+    - testpackage
+    - testifylint
+    - varnamelen
+    - wsl
+
+linters-settings:
+  govet:
+    # Report about shadowed variables.
+    # Default: false
+    # check-shadowing: true
+    # Settings per analyzer.
+    settings:
+      # Analyzer name, run `go tool vet help` to see all analyzers.
+      printf:
+        # Comma-separated list of print function names to check (in addition to default, see `go tool vet help printf`).
+        # Default: []
+        funcs:
+          - (github.com/golangci/golangci-lint/pkg/logutils.Log).Infof
+          - (github.com/golangci/golangci-lint/pkg/logutils.Log).Warnf
+          - (github.com/golangci/golangci-lint/pkg/logutils.Log).Errorf
+          - (github.com/golangci/golangci-lint/pkg/logutils.Log).Fatalf
