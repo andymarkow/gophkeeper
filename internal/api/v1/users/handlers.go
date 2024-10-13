@@ -25,17 +25,17 @@ type Handlers struct {
 
 // NewHandlers returns a new Handlers instance.
 func NewHandlers(repo userrepo.Storage, auth *auth.JWTAuth, opts ...Option) *Handlers {
-	userAPI := &Handlers{
+	h := &Handlers{
 		log:     slog.New(&slog.JSONHandler{}),
 		auth:    auth,
 		storage: repo,
 	}
 
 	for _, opt := range opts {
-		opt(userAPI)
+		opt(h)
 	}
 
-	return userAPI
+	return h
 }
 
 // Option is a functional option type for Handlers.
@@ -43,8 +43,8 @@ type Option func(*Handlers)
 
 // WithLogger is an option for Handlers instance that sets logger.
 func WithLogger(log *slog.Logger) Option {
-	return func(u *Handlers) {
-		u.log = log
+	return func(h *Handlers) {
+		h.log = log
 	}
 }
 
@@ -76,7 +76,7 @@ func (h *Handlers) CreateUser(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	if err := h.storage.CreateUser(req.Context(), usr); err != nil {
+	if err := h.storage.AddUser(req.Context(), usr); err != nil {
 		if errors.Is(err, userrepo.ErrUsrAlreadyExists) {
 			h.log.Error("storage.CreateUser", slog.Any("error", err))
 			httperr.HandleError(w, ErrUsrAlreadyExists)
@@ -99,7 +99,7 @@ func (h *Handlers) CreateUser(w http.ResponseWriter, req *http.Request) {
 	}
 
 	// w.Header().Set("Authorization", "Bearer "+token)
-	response.JSONResponse(w, http.StatusOK, CreateUserResponse{Token: token})
+	response.JSONResponse(w, http.StatusCreated, CreateUserResponse{Token: token})
 }
 
 // LoginUser logs in a user.

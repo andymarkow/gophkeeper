@@ -11,6 +11,8 @@ import (
 type Config struct {
 	ServerAddr string
 	LogLevel   string
+	JWTSecret  string
+	CryptoKey  string
 }
 
 func NewConfig() (*Config, error) {
@@ -21,6 +23,8 @@ func NewConfig() (*Config, error) {
 	cfg := &Config{
 		ServerAddr: viper.GetString("address"),
 		LogLevel:   viper.GetString("log-level"),
+		JWTSecret:  viper.GetString("jwt-secret"),
+		CryptoKey:  viper.GetString("crypto-key"),
 	}
 
 	return cfg, nil
@@ -30,6 +34,8 @@ func initConfig() error {
 	pflag.StringP("config", "c", "", "path to config file")
 	pflag.StringP("address", "a", "", "server address")
 	pflag.StringP("log-level", "l", "", "log level")
+	pflag.String("jwt-secret", "", "JWT secret used for token generation and verification")
+	pflag.String("crypto-key", "", "crypto key used for data encryption and decryption")
 	pflag.Parse()
 
 	if err := viper.BindPFlags(pflag.CommandLine); err != nil {
@@ -64,6 +70,8 @@ func readConfigFile(cfgFile string) error {
 func setDefaults() {
 	viper.SetDefault("address", ":8080")
 	viper.SetDefault("log-level", "info")
+	viper.SetDefault("jwt-secret", "topsecretkey")
+	viper.SetDefault("crypto-key", "123456789abcdefg")
 }
 
 func bindEnvs() error {
@@ -76,6 +84,14 @@ func bindEnvs() error {
 	}
 
 	if err := viper.BindEnv("log-level", "KEEPER_LOG_LEVEL"); err != nil {
+		return fmt.Errorf("viper.BindEnv: %w", err)
+	}
+
+	if err := viper.BindEnv("jwt-secret", "KEEPER_JWT_SECRET"); err != nil {
+		return fmt.Errorf("viper.BindEnv: %w", err)
+	}
+
+	if err := viper.BindEnv("crypto-key", "KEEPER_CRYPTO_KEY"); err != nil {
 		return fmt.Errorf("viper.BindEnv: %w", err)
 	}
 

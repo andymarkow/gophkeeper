@@ -15,8 +15,8 @@ type Options struct {
 	Logger *slog.Logger
 }
 
-// NewUsers creates a new users API router.
-func NewUsers(repo userrepo.Storage, jwtSecret string, opts *Options) chi.Router {
+// NewRouter creates a new users API router.
+func NewRouter(repo userrepo.Storage, jwtSecret []byte, opts *Options) chi.Router {
 	if opts == nil {
 		opts = defaultOptions()
 	}

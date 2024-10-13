@@ -11,7 +11,7 @@ import (
 
 // InMemory represents in-memory credentials storage.
 type InMemory struct {
-	// UserLogin -> Login -> Credential.
+	// UserID -> Login -> Credential.
 	creds map[string]map[string]*credential.Credential
 
 	mu sync.RWMutex
@@ -30,10 +30,16 @@ func (s *InMemory) Add(_ context.Context, cred *credential.Credential) error {
 	defer s.mu.Unlock()
 
 	// Check if the user login entry exists in the storage.
-	creds, ok := s.creds[cred.UserLogin()]
+	creds, ok := s.creds[cred.UserID()]
 	if !ok {
-		// UserLogin does not exist in the storage. Add user login and credential to the storage.
-		s.creds[cred.UserLogin()][cred.ID()] = cred
+		// Check if creds entry is nil.
+		if creds == nil {
+			// Initialize creds entry.
+			s.creds[cred.UserID()] = make(map[string]*credential.Credential)
+		}
+
+		// UserID does not exist in the storage. Add user login and credential to the storage.
+		s.creds[cred.UserID()][cred.ID()] = cred
 
 		return nil
 	}
@@ -44,7 +50,7 @@ func (s *InMemory) Add(_ context.Context, cred *credential.Credential) error {
 	}
 
 	// Add credential to the storage.
-	s.creds[cred.UserLogin()][cred.ID()] = cred
+	s.creds[cred.UserID()][cred.ID()] = cred
 
 	return nil
 }
@@ -68,7 +74,7 @@ func (s *InMemory) Get(_ context.Context, userLogin, credID string) (*credential
 	return nil, fmt.Errorf("%w for user login %s: %s", ErrCredNotFound, userLogin, credID)
 }
 
-func (s *InMemory) List(_ context.Context, userLogin string) ([]*credential.Credential, error) {
+func (s *InMemory) GetAll(_ context.Context, userLogin string) ([]*credential.Credential, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -86,23 +92,42 @@ func (s *InMemory) List(_ context.Context, userLogin string) ([]*credential.Cred
 	return credEntries, nil
 }
 
+func (s *InMemory) List(_ context.Context, userLogin string) ([]string, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	// Check if the user login entry exists in the storage.
+	creds, ok := s.creds[userLogin]
+	if !ok {
+		return []string{}, nil
+	}
+
+	credIDs := make([]string, 0, len(creds))
+
+	for credID := range creds {
+		credIDs = append(credIDs, credID)
+	}
+
+	return credIDs, nil
+}
+
 // Update updates a credential in the storage.
 func (s *InMemory) Update(_ context.Context, cred *credential.Credential) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	// Check if the user login entry exists in the storage.
-	creds, ok := s.creds[cred.UserLogin()]
+	creds, ok := s.creds[cred.UserID()]
 	if !ok {
-		return fmt.Errorf("%w for user login %s: %s", ErrCredNotFound, cred.UserLogin(), cred.ID())
+		return fmt.Errorf("%w for user login %s: %s", ErrCredNotFound, cred.UserID(), cred.ID())
 	}
 
 	if _, ok := creds[cred.ID()]; !ok {
-		return fmt.Errorf("%w for user login %s: %s", ErrCredNotFound, cred.UserLogin(), cred.ID())
+		return fmt.Errorf("%w for user login %s: %s", ErrCredNotFound, cred.UserID(), cred.ID())
 	}
 
 	// Update credential in the storage.
-	s.creds[cred.UserLogin()][cred.ID()] = cred
+	s.creds[cred.UserID()][cred.ID()] = cred
 
 	return nil
 }

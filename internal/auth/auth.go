@@ -21,9 +21,9 @@ type Claims struct {
 }
 
 // NewJWTAuth creates new JWTAuth.
-func NewJWTAuth(secret string, opts ...Option) *JWTAuth {
+func NewJWTAuth(secret []byte, opts ...Option) *JWTAuth {
 	a := &JWTAuth{
-		secret:   []byte(secret),
+		secret:   secret,
 		tokenTTL: 24 * time.Hour,
 		issuer:   "gophkeeper",
 	}

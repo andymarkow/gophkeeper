@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"log"
 
 	"github.com/andymarkow/gophkeeper/internal/server/config"
@@ -13,5 +12,5 @@ func main() {
 		log.Fatal(err)
 	}
 
-	fmt.Println(cfg)
+	log.Println(cfg)
 }

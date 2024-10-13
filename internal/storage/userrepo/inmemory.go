@@ -25,8 +25,8 @@ func NewInMemory() *InMemory {
 	}
 }
 
-// CreateUser adds a new user to the storage.
-func (s *InMemory) CreateUser(_ context.Context, usr *user.User) error {
+// AddUser adds a new user to the storage.
+func (s *InMemory) AddUser(_ context.Context, usr *user.User) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 

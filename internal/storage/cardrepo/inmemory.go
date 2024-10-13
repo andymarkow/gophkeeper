@@ -13,7 +13,7 @@ var _ Storage = (*InMemory)(nil)
 
 // InMemory represents in-memory bank cards storage.
 type InMemory struct {
-	// UserLogin -> CardNumber -> BankCard
+	// UserID -> CardNumber -> BankCard
 	cards map[string]map[string]*bankcard.BankCard
 
 	mu sync.RWMutex
@@ -26,16 +26,22 @@ func NewInMemory() *InMemory {
 	}
 }
 
-// Add adds a new bank card to the storage.
-func (s *InMemory) Add(_ context.Context, card *bankcard.BankCard) error {
+// AddCard adds a new bank card to the storage.
+func (s *InMemory) AddCard(_ context.Context, card *bankcard.BankCard) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	// Check if the user login entry exists in the storage.
-	cards, ok := s.cards[card.UserLogin()]
+	cards, ok := s.cards[card.UserID()]
 	if !ok {
-		// UserLogin does not exist in the storage. Add user login and bank card to the storage.
-		s.cards[card.UserLogin()][card.ID()] = card
+		// Check if cards entry is nil.
+		if cards == nil {
+			// Initialize cards entry.
+			s.cards[card.UserID()] = make(map[string]*bankcard.BankCard)
+		}
+
+		// UserID does not exist in the storage. Add user login and bank card to the storage.
+		s.cards[card.UserID()][card.ID()] = card
 
 		return nil
 	}
@@ -46,13 +52,13 @@ func (s *InMemory) Add(_ context.Context, card *bankcard.BankCard) error {
 	}
 
 	// Add bank card to the storage.
-	s.cards[card.UserLogin()][card.ID()] = card
+	s.cards[card.UserID()][card.ID()] = card
 
 	return nil
 }
 
-// Get returns a bank card from the storage.
-func (s *InMemory) Get(_ context.Context, userLogin, cardID string) (*bankcard.BankCard, error) {
+// GetCard returns a bank card from the storage.
+func (s *InMemory) GetCard(_ context.Context, userLogin, cardID string) (*bankcard.BankCard, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -70,8 +76,8 @@ func (s *InMemory) Get(_ context.Context, userLogin, cardID string) (*bankcard.B
 	return nil, fmt.Errorf("%w for user login %s: %s", ErrCardNotFound, userLogin, cardID)
 }
 
-// List returns a list of bank cards from the storage.
-func (s *InMemory) List(_ context.Context, userLogin string) ([]*bankcard.BankCard, error) {
+// GetAllCards returns a list of bank cards from the storage.
+func (s *InMemory) GetAllCards(_ context.Context, userLogin string) ([]*bankcard.BankCard, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -90,29 +96,49 @@ func (s *InMemory) List(_ context.Context, userLogin string) ([]*bankcard.BankCa
 	return cardEntries, nil
 }
 
-// Update updates a bank card in the storage.
-func (s *InMemory) Update(_ context.Context, card *bankcard.BankCard) error {
+// ListCards returns a list of bank card IDs from the storage.
+func (s *InMemory) ListCards(_ context.Context, userLogin string) ([]string, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	// Check if the user login entry exists in the storage.
+	cards, ok := s.cards[userLogin]
+	if !ok {
+		return []string{}, nil
+	}
+
+	cardIDs := make([]string, 0, len(cards))
+
+	for cardID := range cards {
+		cardIDs = append(cardIDs, cardID)
+	}
+
+	return cardIDs, nil
+}
+
+// UpdateCard updates a bank card in the storage.
+func (s *InMemory) UpdateCard(_ context.Context, card *bankcard.BankCard) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	// Check if the user login entry exists in the storage.
-	cards, ok := s.cards[card.UserLogin()]
+	cards, ok := s.cards[card.UserID()]
 	if !ok {
-		return fmt.Errorf("%w for user login %s: %s", ErrCardNotFound, card.UserLogin(), card.ID())
+		return fmt.Errorf("%w for user login %s: %s", ErrCardNotFound, card.UserID(), card.ID())
 	}
 
 	if _, ok := cards[card.ID()]; !ok {
-		return fmt.Errorf("%w for user login %s: %s", ErrCardNotFound, card.UserLogin(), card.ID())
+		return fmt.Errorf("%w for user login %s: %s", ErrCardNotFound, card.UserID(), card.ID())
 	}
 
 	// Update bank card in the storage.
-	s.cards[card.UserLogin()][card.ID()] = card
+	s.cards[card.UserID()][card.ID()] = card
 
 	return nil
 }
 
-// Delete deletes a bank card from the storage.
-func (s *InMemory) Delete(_ context.Context, userLogin, cardID string) error {
+// DeleteCard deletes a bank card from the storage.
+func (s *InMemory) DeleteCard(_ context.Context, userLogin, cardID string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 

@@ -12,10 +12,11 @@ import (
 
 	"golang.org/x/sync/errgroup"
 
-	"github.com/andymarkow/gophkeeper/internal/api"
 	"github.com/andymarkow/gophkeeper/internal/server/config"
 	"github.com/andymarkow/gophkeeper/internal/server/httpserver"
+	"github.com/andymarkow/gophkeeper/internal/server/router"
 	"github.com/andymarkow/gophkeeper/internal/slogger"
+	"github.com/andymarkow/gophkeeper/internal/storage/cardrepo"
 	"github.com/andymarkow/gophkeeper/internal/storage/userrepo"
 )
 
@@ -37,7 +38,13 @@ func NewServer() (*Server, error) {
 
 	logger := slogger.NewLogger(slogger.WithLevel(logLevel))
 
-	router := api.NewAPI(userrepo.NewInMemory(), api.WithLogger(logger))
+	router := router.NewRouter(
+		userrepo.NewInMemory(),
+		cardrepo.NewInMemory(),
+		[]byte(cfg.JWTSecret),
+		[]byte(cfg.CryptoKey),
+		router.WithLogger(logger),
+	)
 
 	server := &Server{
 		log:     logger,
@@ -64,17 +71,16 @@ func (s *Server) Run() error {
 
 	select {
 	case <-quit:
-		s.log.Info("OS signal received")
+		s.log.Info("Interruption signal received")
+
+		stopCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		if err := s.httpsrv.Shutdown(stopCtx); err != nil {
+			return fmt.Errorf("httpsrv.Shutdown: %w", err)
+		}
 
 	case <-ctx.Done():
-		s.log.Info("Context is done")
-	}
-
-	stopCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	if err := s.httpsrv.Shutdown(stopCtx); err != nil {
-		return fmt.Errorf("httpsrv.Shutdown: %w", err)
 	}
 
 	if err := errgrp.Wait(); err != nil {

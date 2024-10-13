@@ -11,8 +11,8 @@ type HTTPError struct {
 	msg  error
 }
 
-func NewHTTPError(code int, err error) HTTPError {
-	return HTTPError{code: code, msg: err}
+func NewHTTPError(code int, err error) *HTTPError {
+	return &HTTPError{code: code, msg: err}
 }
 
 func (e *HTTPError) Code() int {
@@ -27,7 +27,7 @@ type jsonResponse struct {
 	Error string `json:"error"`
 }
 
-func HandleError(w http.ResponseWriter, err HTTPError) {
+func HandleError(w http.ResponseWriter, err *HTTPError) {
 	resp := &jsonResponse{
 		Error: err.Error(),
 	}

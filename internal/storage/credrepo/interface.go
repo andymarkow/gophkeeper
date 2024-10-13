@@ -12,7 +12,8 @@ var _ Storage = (*InMemory)(nil)
 type Storage interface {
 	Add(ctx context.Context, cred *credential.Credential) error
 	Get(ctx context.Context, userLogin, credID string) (*credential.Credential, error)
-	List(ctx context.Context, userLogin string) ([]*credential.Credential, error)
+	GetAll(ctx context.Context, userLogin string) ([]*credential.Credential, error)
+	List(ctx context.Context, userLogin string) ([]string, error)
 	Update(ctx context.Context, cred *credential.Credential) error
 	Delete(ctx context.Context, userLogin string, credID string) error
 }

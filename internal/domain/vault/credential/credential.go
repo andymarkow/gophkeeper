@@ -1,14 +1,18 @@
 // Package credential provides the domain model for credentials.
 package credential
 
-import "fmt"
+import (
+	"fmt"
+	"time"
+)
 
 // Credential represents credentials.
 type Credential struct {
-	id        string
-	userLogin string
-	metadata  map[string]string
-	data      *Data
+	id       string
+	userID   string
+	metadata map[string]string
+	createAt time.Time
+	data     *Data
 }
 
 // Data represents credentials data.
@@ -18,24 +22,21 @@ type Data struct {
 }
 
 // NewCredential creates a new credential.
-func NewCredential(id, userLogin string, metadata map[string]string, data *Data) (*Credential, error) {
+func NewCredential(id, userID string, metadata map[string]string, createAt time.Time, data *Data) (*Credential, error) {
 	if id == "" {
 		return nil, fmt.Errorf("id must not be empty")
 	}
 
-	if userLogin == "" {
-		return nil, fmt.Errorf("user login must not be empty")
-	}
-
-	if data.login == "" {
-		return nil, fmt.Errorf("login must not be empty")
+	if userID == "" {
+		return nil, fmt.Errorf("user id must not be empty")
 	}
 
 	return &Credential{
-		id:        id,
-		userLogin: userLogin,
-		metadata:  metadata,
-		data:      data,
+		id:       id,
+		userID:   userID,
+		metadata: metadata,
+		createAt: createAt,
+		data:     data,
 	}, nil
 }
 
@@ -44,14 +45,19 @@ func (c *Credential) ID() string {
 	return c.id
 }
 
-// UserLogin returns the user login of the credential.
-func (c *Credential) UserLogin() string {
-	return c.userLogin
+// UserID returns the user login of the credential.
+func (c *Credential) UserID() string {
+	return c.userID
 }
 
 // Metadata returns the metadata of the credential.
 func (c *Credential) Metadata() map[string]string {
 	return c.metadata
+}
+
+// CreateAt returns the create at of the credential.
+func (c *Credential) CreateAt() time.Time {
+	return c.createAt
 }
 
 // Data returns the data of the credential.
