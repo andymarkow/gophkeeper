@@ -14,7 +14,7 @@ var _ Storage = (*InMemory)(nil)
 // InMemory represents in-memory bank cards storage.
 type InMemory struct {
 	// UserID -> CardNumber -> BankCard
-	cards map[string]map[string]*bankcard.BankCard
+	cards map[string]map[string]bankcard.BankCard
 
 	mu sync.RWMutex
 }
@@ -22,7 +22,7 @@ type InMemory struct {
 // NewInMemory creates new in-memory bank cards storage.
 func NewInMemory() *InMemory {
 	return &InMemory{
-		cards: make(map[string]map[string]*bankcard.BankCard),
+		cards: make(map[string]map[string]bankcard.BankCard),
 	}
 }
 
@@ -37,11 +37,11 @@ func (s *InMemory) AddCard(_ context.Context, card *bankcard.BankCard) error {
 		// Check if cards entry is nil.
 		if cards == nil {
 			// Initialize cards entry.
-			s.cards[card.UserID()] = make(map[string]*bankcard.BankCard)
+			s.cards[card.UserID()] = make(map[string]bankcard.BankCard)
 		}
 
 		// UserID does not exist in the storage. Add user login and bank card to the storage.
-		s.cards[card.UserID()][card.ID()] = card
+		s.cards[card.UserID()][card.ID()] = *card
 
 		return nil
 	}
@@ -52,7 +52,7 @@ func (s *InMemory) AddCard(_ context.Context, card *bankcard.BankCard) error {
 	}
 
 	// Add bank card to the storage.
-	s.cards[card.UserID()][card.ID()] = card
+	s.cards[card.UserID()][card.ID()] = *card
 
 	return nil
 }
@@ -70,7 +70,9 @@ func (s *InMemory) GetCard(_ context.Context, userLogin, cardID string) (*bankca
 
 	// Check if the bank card entry exists in the storage.
 	if card, ok := cards[cardID]; ok {
-		return card, nil
+		crd := card
+
+		return &crd, nil
 	}
 
 	return nil, fmt.Errorf("%w for user login %s: %s", ErrCardNotFound, userLogin, cardID)
@@ -90,7 +92,8 @@ func (s *InMemory) GetAllCards(_ context.Context, userLogin string) ([]*bankcard
 	}
 
 	for _, card := range cards {
-		cardEntries = append(cardEntries, card)
+		crd := card
+		cardEntries = append(cardEntries, &crd)
 	}
 
 	return cardEntries, nil
@@ -132,7 +135,7 @@ func (s *InMemory) UpdateCard(_ context.Context, card *bankcard.BankCard) error 
 	}
 
 	// Update bank card in the storage.
-	s.cards[card.UserID()][card.ID()] = card
+	s.cards[card.UserID()][card.ID()] = *card
 
 	return nil
 }

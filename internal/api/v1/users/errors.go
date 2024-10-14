@@ -7,7 +7,6 @@ import (
 	"github.com/andymarkow/gophkeeper/internal/httperr"
 )
 
-//nolint:gochecknoglobals
 var (
 	ErrReqPayloadEmpty  = httperr.NewHTTPError(http.StatusBadRequest, errors.New("request payload is empty"))
 	ErrUsrAlreadyExists = httperr.NewHTTPError(http.StatusConflict, errors.New("user already exists"))

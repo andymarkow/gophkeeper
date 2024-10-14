@@ -7,6 +7,9 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"slices"
+
+	"github.com/go-chi/chi/v5"
 
 	"github.com/andymarkow/gophkeeper/internal/api/v1/response"
 	"github.com/andymarkow/gophkeeper/internal/domain/vault/bankcard"
@@ -57,16 +60,8 @@ func (h *Handlers) CreateCard(w http.ResponseWriter, req *http.Request) {
 
 	var payload CreateCardRequest
 
-	if err := json.NewDecoder(req.Body).Decode(&payload); err != nil {
-		if errors.Is(err, io.EOF) {
-			h.log.Error("json.NewDecoder.Decode", slog.Any("error", err))
-			httperr.HandleError(w, ErrReqPayloadEmpty)
-
-			return
-		}
-
-		h.log.Error("json.NewDecoder.Decode", slog.Any("error", err))
-		httperr.HandleError(w, httperr.NewHTTPError(http.StatusBadRequest, err))
+	if err := h.readBody(req.Body, &payload); err != nil {
+		httperr.HandleError(w, err)
 
 		return
 	}
@@ -114,6 +109,247 @@ func (h *Handlers) processCreateCardRequest(ctx context.Context, userID string, 
 		h.log.Error("failed to add bank card to storage", slog.Any("error", err))
 
 		return httperr.NewHTTPError(http.StatusInternalServerError, err)
+	}
+
+	return nil
+}
+
+func (h *Handlers) GetCard(w http.ResponseWriter, req *http.Request) {
+	userID := req.Header.Get("X-User-Id")
+	if userID == "" {
+		httperr.HandleError(w, ErrUsrIDHeaderEmpty)
+
+		return
+	}
+
+	cardID := chi.URLParam(req, "cardID")
+	if cardID == "" {
+		httperr.HandleError(w, ErrCardIDEmpty)
+
+		return
+	}
+
+	resp, err := h.processGetCardRequest(req.Context(), userID, cardID)
+	if err != nil {
+		httperr.HandleError(w, err)
+
+		return
+	}
+
+	response.JSONResponse(w, http.StatusOK, resp)
+}
+
+func (h *Handlers) processGetCardRequest(ctx context.Context, userID, cardID string) (*GetCardResponse, *httperr.HTTPError) {
+	card, err := h.storage.GetCard(ctx, userID, cardID)
+	if err != nil {
+		if errors.Is(err, cardrepo.ErrCardNotFound) {
+			h.log.Error("failed to get bank card from storage", slog.Any("error", err))
+
+			return nil, httperr.NewHTTPError(http.StatusNotFound, err)
+		}
+
+		h.log.Error("failed to get bank card from storage", slog.Any("error", err))
+
+		return nil, httperr.NewHTTPError(http.StatusInternalServerError, err)
+	}
+
+	decData, err := card.Data().Decrypt(h.cryptoKey)
+	if err != nil {
+		h.log.Error("failed to decrypt bank card data", slog.Any("error", err))
+
+		return nil, httperr.NewHTTPError(http.StatusInternalServerError, err)
+	}
+
+	// Set decrypted data.
+	card.SetData(decData)
+
+	return &GetCardResponse{
+		BankCard: &BankCard{
+			ID:       card.ID(),
+			Metadata: card.Metadata(),
+			Data: &CardData{
+				Number:   card.Data().Number(),
+				Name:     card.Data().Name(),
+				CVV:      card.Data().CVV(),
+				ExpireAt: card.Data().ExpireAt(),
+			},
+		},
+	}, nil
+}
+
+func (h *Handlers) ListCards(w http.ResponseWriter, req *http.Request) {
+	userID := req.Header.Get("X-User-Id")
+	if userID == "" {
+		httperr.HandleError(w, ErrUsrIDHeaderEmpty)
+
+		return
+	}
+
+	resp, err := h.processListCardsRequest(req.Context(), userID)
+	if err != nil {
+		httperr.HandleError(w, err)
+
+		return
+	}
+
+	response.JSONResponse(w, http.StatusOK, resp)
+}
+
+func (h *Handlers) processListCardsRequest(ctx context.Context, userID string) (*ListCardsResponse, *httperr.HTTPError) {
+	cards, err := h.storage.ListCards(ctx, userID)
+	if err != nil {
+		h.log.Error("failed to list bank cards from storage", slog.Any("error", err))
+
+		return nil, httperr.NewHTTPError(http.StatusInternalServerError, err)
+	}
+
+	slices.Sort(cards)
+
+	return &ListCardsResponse{IDs: cards}, nil
+}
+
+func (h *Handlers) UpdateCard(w http.ResponseWriter, req *http.Request) {
+	userID := req.Header.Get("X-User-Id")
+	if userID == "" {
+		httperr.HandleError(w, ErrUsrIDHeaderEmpty)
+
+		return
+	}
+
+	cardID := chi.URLParam(req, "cardID")
+	if cardID == "" {
+		httperr.HandleError(w, ErrCardIDEmpty)
+
+		return
+	}
+
+	var payload UpdateCardRequest
+
+	if err := h.readBody(req.Body, &payload); err != nil {
+		httperr.HandleError(w, err)
+
+		return
+	}
+
+	defer req.Body.Close()
+
+	err := h.processUpdateCardRequest(req.Context(), userID, cardID, &payload)
+	if err != nil {
+		httperr.HandleError(w, err)
+
+		return
+	}
+
+	response.JSONResponse(w, http.StatusNoContent, nil)
+}
+
+func (h *Handlers) processUpdateCardRequest(ctx context.Context, userID, cardID string, payload *UpdateCardRequest) *httperr.HTTPError {
+	// Check if bank card exists in storage.
+	// _, err := h.storage.GetCard(ctx, userID, cardID)
+	// if err != nil {
+	// 	if errors.Is(err, cardrepo.ErrCardNotFound) {
+	// 		h.log.Error("failed to get bank card from storage", slog.Any("error", err))
+
+	// 		return httperr.NewHTTPError(http.StatusNotFound, err)
+	// 	}
+
+	// 	h.log.Error("failed to get bank card from storage", slog.Any("error", err))
+
+	// 	return httperr.NewHTTPError(http.StatusInternalServerError, err)
+	// }
+
+	// Read bank card data from the payload.
+	data, err := bankcard.NewData(payload.Data.Number, payload.Data.Name, payload.Data.CVV, payload.Data.ExpireAt)
+	if err != nil {
+		h.log.Error("failed to read bank card data", slog.Any("error", err))
+
+		return httperr.NewHTTPError(http.StatusBadRequest, err)
+	}
+
+	// Encrypt bank card data from the payload.
+	encData, err := data.Encrypt(h.cryptoKey)
+	if err != nil {
+		h.log.Error("failed to encrypt bank card data", slog.Any("error", err))
+
+		return httperr.NewHTTPError(http.StatusInternalServerError, err)
+	}
+
+	card, err := bankcard.CreateBankCard(cardID, userID, payload.Metadata, encData)
+	if err != nil {
+		h.log.Error("failed to create bank card", slog.Any("error", err))
+
+		return httperr.NewHTTPError(http.StatusBadRequest, err)
+	}
+
+	if err := h.storage.UpdateCard(ctx, card); err != nil {
+		if errors.Is(err, cardrepo.ErrCardNotFound) {
+			h.log.Error("failed to get bank card from storage", slog.Any("error", err))
+
+			return httperr.NewHTTPError(http.StatusNotFound, err)
+		}
+
+		h.log.Error("failed to update bank card in storage", slog.Any("error", err))
+
+		return httperr.NewHTTPError(http.StatusInternalServerError, err)
+	}
+
+	return nil
+}
+
+func (h *Handlers) DeleteCard(w http.ResponseWriter, req *http.Request) {
+	userID := req.Header.Get("X-User-Id")
+	if userID == "" {
+		httperr.HandleError(w, ErrUsrIDHeaderEmpty)
+
+		return
+	}
+
+	cardID := chi.URLParam(req, "cardID")
+	if cardID == "" {
+		httperr.HandleError(w, ErrCardIDEmpty)
+
+		return
+	}
+
+	err := h.processDeleteCardRequest(req.Context(), userID, cardID)
+	if err != nil {
+		httperr.HandleError(w, err)
+
+		return
+	}
+
+	response.JSONResponse(w, http.StatusNoContent, nil)
+}
+
+func (h *Handlers) processDeleteCardRequest(ctx context.Context, userID, cardID string) *httperr.HTTPError {
+	err := h.storage.DeleteCard(ctx, userID, cardID)
+	if err != nil {
+		if errors.Is(err, cardrepo.ErrCardNotFound) {
+			h.log.Error("failed to delete bank card from storage", slog.Any("error", err))
+
+			return httperr.NewHTTPError(http.StatusNotFound, err)
+		}
+
+		h.log.Error("failed to delete bank card from storage", slog.Any("error", err))
+
+		return httperr.NewHTTPError(http.StatusInternalServerError, err)
+	}
+
+	return nil
+}
+
+func (h *Handlers) readBody(body io.ReadCloser, v any) *httperr.HTTPError {
+	err := json.NewDecoder(body).Decode(v)
+	if err != nil {
+		if errors.Is(err, io.EOF) {
+			h.log.Error("json.NewDecoder.Decode", slog.Any("error", err))
+
+			return ErrReqPayloadEmpty
+		}
+
+		h.log.Error("json.NewDecoder.Decode", slog.Any("error", err))
+
+		return httperr.NewHTTPError(http.StatusBadRequest, err)
 	}
 
 	return nil

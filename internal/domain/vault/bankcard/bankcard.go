@@ -28,24 +28,20 @@ type Data struct {
 	expireAt string
 }
 
-func CreateData(number, name, cvv string, expireAt time.Time) (*Data, error) {
+func CreateData(number, name, cvv, expireAt string) (*Data, error) {
 	if !validateCardNumber(number) {
 		return nil, fmt.Errorf("invalid card number")
 	}
 
-	if len(cvv) != 3 {
-		return nil, fmt.Errorf("card cvv value is not 3 digits")
+	if err := validateCardCvv(cvv); err != nil {
+		return nil, fmt.Errorf("invalid card cvv: %w", err)
 	}
 
-	if _, err := strconv.Atoi(cvv); err != nil {
-		return nil, fmt.Errorf("card cvv value is not a number")
+	if err := validateCardExpireAt(expireAt); err != nil {
+		return nil, fmt.Errorf("invalid card expiration date: %w", err)
 	}
 
-	if expireAt.IsZero() {
-		return nil, fmt.Errorf("invalid card expiration date")
-	}
-
-	return NewData(number, name, cvv, expireAt.String())
+	return NewData(number, name, cvv, expireAt)
 }
 
 func NewData(number, name, cvv, expireAt string) (*Data, error) {
@@ -123,6 +119,11 @@ func (c *BankCard) Metadata() map[string]string {
 // CreateAt returns the create at of the bank card.
 func (c *BankCard) CreateAt() time.Time {
 	return c.createAt
+}
+
+// SetData sets the data of the bank card.
+func (c *BankCard) SetData(data *Data) {
+	c.data = data
 }
 
 // Data returns the data of the bank card.
@@ -237,4 +238,27 @@ func validateCardNumber(cardNumber string) bool {
 	}
 
 	return sum%10 == 0
+}
+
+// validateCardCvv checks the card CVV value is valid.
+func validateCardCvv(cvv string) error {
+	if len(cvv) != 3 {
+		return fmt.Errorf("value is not 3 digits")
+	}
+
+	if _, err := strconv.Atoi(cvv); err != nil {
+		return fmt.Errorf("value is not a number")
+	}
+
+	return nil
+}
+
+// validateCardExpireAt checks the card expiration date is valid.
+func validateCardExpireAt(expireAt string) error {
+	_, err := time.Parse(time.RFC3339, expireAt)
+	if err != nil {
+		return fmt.Errorf("cant parse date as RFC3339 format")
+	}
+
+	return nil
 }

@@ -1,15 +1,12 @@
 //nolint:tagliatelle
 package bankcards
 
-import "time"
-
-// CreateCardRequest represents create bank card request.
-type CreateCardRequest struct {
+type BankCard struct {
 	// ID represents bank card ID.
 	ID string `json:"id"`
 
 	// Metadata represents bank card metadata.
-	Metadata map[string]string `json:"metadata"`
+	Metadata map[string]string `json:"metadata,omitempty"`
 
 	// Data represents bank card data.
 	Data *CardData `json:"data"`
@@ -27,11 +24,31 @@ type CardData struct {
 	CVV string `json:"cvv"`
 
 	// ExpireAt represents bank card expire at.
-	ExpireAt time.Time `json:"expire_at"`
+	ExpireAt string `json:"expire_at"`
+}
+
+// CreateCardRequest represents create bank card request.
+type CreateCardRequest struct {
+	*BankCard
 }
 
 // CreateCardResponse represents create bank card response.
 type CreateCardResponse struct {
 	// Message represents response message.
 	Message string `json:"message"`
+}
+
+// GetCardResponse represents get bank card response.
+type GetCardResponse struct {
+	*BankCard
+}
+
+// ListCardsResponse represents list bank cards response.
+type ListCardsResponse struct {
+	IDs []string `json:"ids"`
+}
+
+// UpdateCardRequest represents update bank card request.
+type UpdateCardRequest struct {
+	*BankCard
 }

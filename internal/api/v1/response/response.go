@@ -10,7 +10,12 @@ func JSONResponse(w http.ResponseWriter, status int, resp any) {
 	w.Header().Set("content-type", "application/json")
 	w.WriteHeader(status)
 
-	if err := json.NewEncoder(w).Encode(resp); err != nil {
+	if resp == nil {
+		return
+	}
+
+	err := json.NewEncoder(w).Encode(resp)
+	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 	}
 }

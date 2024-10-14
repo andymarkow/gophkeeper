@@ -24,15 +24,13 @@ func NewRouter(repo cardrepo.Storage, cryptoKey []byte, opts *Options) chi.Route
 
 	r := chi.NewRouter()
 
-	r.Group(func(r chi.Router) {
+	return r.Group(func(r chi.Router) {
 		r.Post("/", h.CreateCard)
-		// r.Get("/", h.ListCards)
-		// r.Get("/{id:[0-9]+}", h.GetCard)
-		// r.Put("/{id:[0-9]+}", h.UpdateCard)
-		// r.Delete("/{id:[0-9]+}", h.DeleteCard)
+		r.Get("/", h.ListCards)
+		r.Get("/{cardID}", h.GetCard)
+		r.Put("/{cardID}", h.UpdateCard)
+		r.Delete("/{cardID}", h.DeleteCard)
 	})
-
-	return r
 }
 
 // defaultOptions returns the default options.
