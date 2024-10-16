@@ -1,4 +1,3 @@
-// Package credrepo provides credentials storage implementation.
 package credrepo
 
 import (
@@ -12,7 +11,7 @@ import (
 // InMemory represents in-memory credentials storage.
 type InMemory struct {
 	// UserID -> Login -> Credential.
-	creds map[string]map[string]*credential.Credential
+	creds map[string]map[string]credential.Credential
 
 	mu sync.RWMutex
 }
@@ -20,12 +19,12 @@ type InMemory struct {
 // NewInMemory creates new in-memory credentials storage.
 func NewInMemory() *InMemory {
 	return &InMemory{
-		creds: make(map[string]map[string]*credential.Credential),
+		creds: make(map[string]map[string]credential.Credential),
 	}
 }
 
-// Add adds a new credential to the storage.
-func (s *InMemory) Add(_ context.Context, cred *credential.Credential) error {
+// AddCredential adds a new credential to the storage.
+func (s *InMemory) AddCredential(_ context.Context, cred *credential.Credential) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -35,11 +34,11 @@ func (s *InMemory) Add(_ context.Context, cred *credential.Credential) error {
 		// Check if creds entry is nil.
 		if creds == nil {
 			// Initialize creds entry.
-			s.creds[cred.UserID()] = make(map[string]*credential.Credential)
+			s.creds[cred.UserID()] = make(map[string]credential.Credential)
 		}
 
 		// UserID does not exist in the storage. Add user login and credential to the storage.
-		s.creds[cred.UserID()][cred.ID()] = cred
+		s.creds[cred.UserID()][cred.ID()] = *cred
 
 		return nil
 	}
@@ -50,13 +49,13 @@ func (s *InMemory) Add(_ context.Context, cred *credential.Credential) error {
 	}
 
 	// Add credential to the storage.
-	s.creds[cred.UserID()][cred.ID()] = cred
+	s.creds[cred.UserID()][cred.ID()] = *cred
 
 	return nil
 }
 
-// Get returns a credential from the storage.
-func (s *InMemory) Get(_ context.Context, userLogin, credID string) (*credential.Credential, error) {
+// GetCredential returns a credential from the storage.
+func (s *InMemory) GetCredential(_ context.Context, userLogin, credID string) (*credential.Credential, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -68,31 +67,15 @@ func (s *InMemory) Get(_ context.Context, userLogin, credID string) (*credential
 
 	// Check if the credential entry exists in the storage.
 	if cred, ok := creds[credID]; ok {
-		return cred, nil
+		crd := cred
+
+		return &crd, nil
 	}
 
 	return nil, fmt.Errorf("%w for user login %s: %s", ErrCredNotFound, userLogin, credID)
 }
 
-func (s *InMemory) GetAll(_ context.Context, userLogin string) ([]*credential.Credential, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	credEntries := make([]*credential.Credential, 0)
-
-	creds, ok := s.creds[userLogin]
-	if !ok {
-		return credEntries, nil
-	}
-
-	for _, cred := range creds {
-		credEntries = append(credEntries, cred)
-	}
-
-	return credEntries, nil
-}
-
-func (s *InMemory) List(_ context.Context, userLogin string) ([]string, error) {
+func (s *InMemory) ListCredentials(_ context.Context, userLogin string) ([]string, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -111,8 +94,8 @@ func (s *InMemory) List(_ context.Context, userLogin string) ([]string, error) {
 	return credIDs, nil
 }
 
-// Update updates a credential in the storage.
-func (s *InMemory) Update(_ context.Context, cred *credential.Credential) error {
+// UpdateCredential updates a credential in the storage.
+func (s *InMemory) UpdateCredential(_ context.Context, cred *credential.Credential) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -122,18 +105,19 @@ func (s *InMemory) Update(_ context.Context, cred *credential.Credential) error 
 		return fmt.Errorf("%w for user login %s: %s", ErrCredNotFound, cred.UserID(), cred.ID())
 	}
 
+	// Check if the credential entry exists in the storage.
 	if _, ok := creds[cred.ID()]; !ok {
 		return fmt.Errorf("%w for user login %s: %s", ErrCredNotFound, cred.UserID(), cred.ID())
 	}
 
 	// Update credential in the storage.
-	s.creds[cred.UserID()][cred.ID()] = cred
+	s.creds[cred.UserID()][cred.ID()] = *cred
 
 	return nil
 }
 
-// Delete removes a credential from the storage.
-func (s *InMemory) Delete(_ context.Context, userLogin string, credID string) error {
+// DeleteCredential removes a credential from the storage.
+func (s *InMemory) DeleteCredential(_ context.Context, userLogin string, credID string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 

@@ -1,5 +1,5 @@
-// Package response provides the response API.
-package response
+// Package api provides the API.
+package api
 
 import (
 	"encoding/json"

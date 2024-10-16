@@ -20,18 +20,6 @@ fmt:
 tidy:
 	go mod tidy
 
-.PHONY: run-server
-run-server:
-	go run ./cmd/server
-
-.PHONY: run-postgres
-run-postgres:
-	docker-compose up postgres pgadmin
-
-.PHONY: stop-postgres
-stop-postgres:
-	docker-compose down postgres pgadmin
-
 .PHONY: vet
 vet:
 	go vet ./...
@@ -54,3 +42,23 @@ coverage:
 	go tool cover -func=.coverage.cov
 	go tool cover -html=.coverage.cov
 	rm .coverage.cov
+
+.PHONY: run-server
+run-server:
+	go run ./cmd/server
+
+.PHONY: run-postgres
+run-postgres:
+	docker-compose up -d postgres pgadmin
+
+.PHONY: stop-postgres
+stop-postgres:
+	docker-compose down postgres pgadmin
+
+.PHONY: run-minio
+run-minio:
+	docker-compose up -d minio
+
+.PHONY: stop-minio
+stop-minio:	
+	docker-compose down minio

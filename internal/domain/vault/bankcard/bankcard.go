@@ -13,11 +13,12 @@ import (
 
 // BankCard represents bank card.
 type BankCard struct {
-	id       string
-	userID   string
-	metadata map[string]string
-	createAt time.Time
-	data     *Data
+	id        string
+	userID    string
+	metadata  map[string]string
+	createAt  time.Time
+	updatedAt time.Time
+	data      *Data
 }
 
 // Data represents bank card data.
@@ -75,11 +76,11 @@ func CreateBankCard(id, userID string, metadata map[string]string, data *Data) (
 		return nil, fmt.Errorf("data must not be empty")
 	}
 
-	return NewBankCard(id, userID, metadata, time.Now(), data)
+	return NewBankCard(id, userID, metadata, time.Now(), time.Now(), data)
 }
 
 // NewBankCard creates a new bank card.
-func NewBankCard(id, userID string, metadata map[string]string, createAt time.Time, data *Data) (*BankCard, error) {
+func NewBankCard(id, userID string, metadata map[string]string, createAt, updatedAt time.Time, data *Data) (*BankCard, error) {
 	if id == "" {
 		return nil, fmt.Errorf("id must not be empty")
 	}
@@ -93,11 +94,12 @@ func NewBankCard(id, userID string, metadata map[string]string, createAt time.Ti
 	}
 
 	return &BankCard{
-		id:       id,
-		userID:   userID,
-		metadata: metadata,
-		createAt: createAt,
-		data:     data,
+		id:        id,
+		userID:    userID,
+		metadata:  metadata,
+		createAt:  createAt,
+		updatedAt: updatedAt,
+		data:      data,
 	}, nil
 }
 
@@ -119,6 +121,11 @@ func (c *BankCard) Metadata() map[string]string {
 // CreateAt returns the create at of the bank card.
 func (c *BankCard) CreateAt() time.Time {
 	return c.createAt
+}
+
+// UpdatedAt returns the update at of the bank card.
+func (c *BankCard) UpdatedAt() time.Time {
+	return c.updatedAt
 }
 
 // SetData sets the data of the bank card.

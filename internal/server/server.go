@@ -17,6 +17,7 @@ import (
 	"github.com/andymarkow/gophkeeper/internal/server/router"
 	"github.com/andymarkow/gophkeeper/internal/slogger"
 	"github.com/andymarkow/gophkeeper/internal/storage/cardrepo"
+	"github.com/andymarkow/gophkeeper/internal/storage/credrepo"
 	"github.com/andymarkow/gophkeeper/internal/storage/userrepo"
 )
 
@@ -41,6 +42,7 @@ func NewServer() (*Server, error) {
 	router := router.NewRouter(
 		userrepo.NewInMemory(),
 		cardrepo.NewInMemory(),
+		credrepo.NewInMemory(),
 		[]byte(cfg.JWTSecret),
 		[]byte(cfg.CryptoKey),
 		router.WithLogger(logger),

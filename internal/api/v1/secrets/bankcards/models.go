@@ -9,11 +9,11 @@ type BankCard struct {
 	Metadata map[string]string `json:"metadata,omitempty"`
 
 	// Data represents bank card data.
-	Data *CardData `json:"data"`
+	Data *Data `json:"data"`
 }
 
-// CardData represents bank card data.
-type CardData struct {
+// Data represents bank card data.
+type Data struct {
 	// Number represents bank card number.
 	Number string `json:"number"`
 
@@ -40,7 +40,7 @@ type CreateCardResponse struct {
 
 // GetCardResponse represents get bank card response.
 type GetCardResponse struct {
-	*BankCard
+	BankCard
 }
 
 // ListCardsResponse represents list bank cards response.

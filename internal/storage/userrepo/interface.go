@@ -1,3 +1,4 @@
+// Package userrepo provides storage implementation for user model.
 package userrepo
 
 import (

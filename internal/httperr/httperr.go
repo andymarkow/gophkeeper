@@ -3,7 +3,13 @@ package httperr
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
+)
+
+var (
+	ErrReqPayloadEmpty  = NewHTTPError(http.StatusBadRequest, errors.New("request payload is empty"))
+	ErrUsrIDHeaderEmpty = NewHTTPError(http.StatusBadRequest, errors.New("X-User-Id header is empty"))
 )
 
 type HTTPError struct {

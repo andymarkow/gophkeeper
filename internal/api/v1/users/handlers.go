@@ -9,7 +9,7 @@ import (
 
 	"golang.org/x/crypto/bcrypt"
 
-	"github.com/andymarkow/gophkeeper/internal/api/v1/response"
+	"github.com/andymarkow/gophkeeper/internal/api"
 	"github.com/andymarkow/gophkeeper/internal/auth"
 	"github.com/andymarkow/gophkeeper/internal/domain/user"
 	"github.com/andymarkow/gophkeeper/internal/httperr"
@@ -55,7 +55,7 @@ func (h *Handlers) CreateUser(w http.ResponseWriter, req *http.Request) {
 	if err := json.NewDecoder(req.Body).Decode(&payload); err != nil {
 		if errors.Is(err, io.EOF) {
 			h.log.Error("json.NewDecoder.Decode", slog.Any("error", err))
-			httperr.HandleError(w, ErrReqPayloadEmpty)
+			httperr.HandleError(w, httperr.ErrReqPayloadEmpty)
 
 			return
 		}
@@ -98,8 +98,7 @@ func (h *Handlers) CreateUser(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	// w.Header().Set("Authorization", "Bearer "+token)
-	response.JSONResponse(w, http.StatusCreated, CreateUserResponse{Token: token})
+	api.JSONResponse(w, http.StatusCreated, CreateUserResponse{Token: token})
 }
 
 // LoginUser logs in a user.
@@ -109,7 +108,7 @@ func (h *Handlers) LoginUser(w http.ResponseWriter, req *http.Request) {
 	if err := json.NewDecoder(req.Body).Decode(&payload); err != nil {
 		if errors.Is(err, io.EOF) {
 			h.log.Error("json.NewDecoder.Decode", slog.Any("error", err))
-			httperr.HandleError(w, ErrReqPayloadEmpty)
+			httperr.HandleError(w, httperr.ErrReqPayloadEmpty)
 
 			return
 		}
@@ -160,6 +159,5 @@ func (h *Handlers) LoginUser(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	// w.Header().Set("Authorization", "Bearer "+token)
-	response.JSONResponse(w, http.StatusOK, LoginUserResponse{Token: token})
+	api.JSONResponse(w, http.StatusOK, LoginUserResponse{Token: token})
 }

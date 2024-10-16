@@ -1,3 +1,4 @@
+// Package credrepo provides credentials storage implementation.
 package credrepo
 
 import (
@@ -10,10 +11,9 @@ var _ Storage = (*InMemory)(nil)
 
 // Storage represents credentials storage interface.
 type Storage interface {
-	Add(ctx context.Context, cred *credential.Credential) error
-	Get(ctx context.Context, userLogin, credID string) (*credential.Credential, error)
-	GetAll(ctx context.Context, userLogin string) ([]*credential.Credential, error)
-	List(ctx context.Context, userLogin string) ([]string, error)
-	Update(ctx context.Context, cred *credential.Credential) error
-	Delete(ctx context.Context, userLogin string, credID string) error
+	AddCredential(ctx context.Context, cred *credential.Credential) error
+	GetCredential(ctx context.Context, userLogin, credID string) (*credential.Credential, error)
+	ListCredentials(ctx context.Context, userLogin string) ([]string, error)
+	UpdateCredential(ctx context.Context, cred *credential.Credential) error
+	DeleteCredential(ctx context.Context, userLogin string, credID string) error
 }

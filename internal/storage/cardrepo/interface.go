@@ -1,3 +1,4 @@
+// Package cardrepo provides bank cards storage implementation.
 package cardrepo
 
 import (
