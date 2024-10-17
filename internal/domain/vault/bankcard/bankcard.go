@@ -16,7 +16,7 @@ type BankCard struct {
 	id        string
 	userID    string
 	metadata  map[string]string
-	createAt  time.Time
+	createdAt time.Time
 	updatedAt time.Time
 	data      *Data
 }
@@ -70,6 +70,11 @@ func NewData(number, name, cvv, expireAt string) (*Data, error) {
 	}, nil
 }
 
+// NewEmptyData creates a new empty data.
+func NewEmptyData() *Data {
+	return &Data{}
+}
+
 // CreateBankCard creates a new bank card.
 func CreateBankCard(id, userID string, metadata map[string]string, data *Data) (*BankCard, error) {
 	if data == nil {
@@ -80,7 +85,7 @@ func CreateBankCard(id, userID string, metadata map[string]string, data *Data) (
 }
 
 // NewBankCard creates a new bank card.
-func NewBankCard(id, userID string, metadata map[string]string, createAt, updatedAt time.Time, data *Data) (*BankCard, error) {
+func NewBankCard(id, userID string, metadata map[string]string, createdAt, updatedAt time.Time, data *Data) (*BankCard, error) {
 	if id == "" {
 		return nil, fmt.Errorf("id must not be empty")
 	}
@@ -97,7 +102,7 @@ func NewBankCard(id, userID string, metadata map[string]string, createAt, update
 		id:        id,
 		userID:    userID,
 		metadata:  metadata,
-		createAt:  createAt,
+		createdAt: createdAt,
 		updatedAt: updatedAt,
 		data:      data,
 	}, nil
@@ -118,9 +123,9 @@ func (c *BankCard) Metadata() map[string]string {
 	return c.metadata
 }
 
-// CreateAt returns the create at of the bank card.
-func (c *BankCard) CreateAt() time.Time {
-	return c.createAt
+// CreatedAt returns the create at of the bank card.
+func (c *BankCard) CreatedAt() time.Time {
+	return c.createdAt
 }
 
 // UpdatedAt returns the update at of the bank card.
@@ -160,22 +165,22 @@ func (d *Data) ExpireAt() string {
 
 // Encrypt encrypts bank card data with the given key.
 func (d *Data) Encrypt(key []byte) (*Data, error) {
-	number, err := cryptutils.EncryptString(d.number, key)
+	number, err := cryptutils.EncryptString(key, d.number)
 	if err != nil {
 		return nil, fmt.Errorf("failed to encrypt card number: %w", err)
 	}
 
-	name, err := cryptutils.EncryptString(d.name, key)
+	name, err := cryptutils.EncryptString(key, d.name)
 	if err != nil {
 		return nil, fmt.Errorf("failed to encrypt card holder name: %w", err)
 	}
 
-	cvv, err := cryptutils.EncryptString(d.cvv, key)
+	cvv, err := cryptutils.EncryptString(key, d.cvv)
 	if err != nil {
 		return nil, fmt.Errorf("failed to encrypt card cvv value: %w", err)
 	}
 
-	expireAt, err := cryptutils.EncryptString(d.expireAt, key)
+	expireAt, err := cryptutils.EncryptString(key, d.expireAt)
 	if err != nil {
 		return nil, fmt.Errorf("failed to encrypt card expire at date: %w", err)
 	}
@@ -190,22 +195,22 @@ func (d *Data) Encrypt(key []byte) (*Data, error) {
 
 // Decrypt decrypts bank card data with the given key.
 func (d *Data) Decrypt(key []byte) (*Data, error) {
-	number, err := cryptutils.DecryptString(d.number, key)
+	number, err := cryptutils.DecryptString(key, d.number)
 	if err != nil {
 		return nil, fmt.Errorf("failed to decrypt card number: %w", err)
 	}
 
-	name, err := cryptutils.DecryptString(d.name, key)
+	name, err := cryptutils.DecryptString(key, d.name)
 	if err != nil {
 		return nil, fmt.Errorf("failed to decrypt card holder name: %w", err)
 	}
 
-	cvv, err := cryptutils.DecryptString(d.cvv, key)
+	cvv, err := cryptutils.DecryptString(key, d.cvv)
 	if err != nil {
 		return nil, fmt.Errorf("failed to decrypt card cvv value: %w", err)
 	}
 
-	expireAt, err := cryptutils.DecryptString(d.expireAt, key)
+	expireAt, err := cryptutils.DecryptString(key, d.expireAt)
 	if err != nil {
 		return nil, fmt.Errorf("failed to decrypt card expire at date: %w", err)
 	}

@@ -53,3 +53,89 @@ func (s *InMemory) AddFile(_ context.Context, file *fileobj.File) error {
 
 	return nil
 }
+
+// GetFile returns a file from the storage.
+func (s *InMemory) GetFile(_ context.Context, userID, fileID string) (*fileobj.File, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	// Check if the user login entry exists in the storage.
+	files, ok := s.files[userID]
+	if !ok {
+		return nil, fmt.Errorf("%w for user login %s: %s", ErrFileNotFound, userID, fileID)
+	}
+
+	// Check if the file entry exists in the storage.
+	if file, ok := files[fileID]; ok {
+		f := file
+
+		return &f, nil
+	}
+
+	return nil, fmt.Errorf("%w for user login %s: %s", ErrFileNotFound, userID, fileID)
+}
+
+// ListFiles returns a list of files from the storage.
+func (s *InMemory) ListFiles(_ context.Context, userID string) ([]*fileobj.File, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	// Check if the user login entry exists in the storage.
+	files, ok := s.files[userID]
+	if !ok {
+		return nil, fmt.Errorf("%w for user login %s", ErrFileNotFound, userID)
+	}
+
+	fl := make([]*fileobj.File, 0, len(files))
+
+	for _, file := range files {
+		f := file
+		fl = append(fl, &f)
+	}
+
+	return fl, nil
+}
+
+// UpdateFile updates a file in the storage.
+func (s *InMemory) UpdateFile(_ context.Context, file *fileobj.File) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	// Check if the user login entry exists in the storage.
+	files, ok := s.files[file.UserID()]
+	if !ok {
+		return fmt.Errorf("%w for user login %s: %s", ErrFileNotFound, file.UserID(), file.ID())
+	}
+
+	// Check if the file entry exists in the storage.
+	if _, ok := files[file.ID()]; !ok {
+		return fmt.Errorf("%w for user login %s: %s", ErrFileNotFound, file.UserID(), file.ID())
+	}
+
+	// Update file in the storage.
+	s.files[file.UserID()][file.ID()] = *file
+
+	return nil
+}
+
+// DeleteFile deletes a file from the storage.
+func (s *InMemory) DeleteFile(_ context.Context, userID, fileID string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	// Check if the user login entry exists in the storage.
+	files, ok := s.files[userID]
+	if !ok {
+		return fmt.Errorf("%w for user login %s: %s", ErrFileNotFound, userID, fileID)
+	}
+
+	// Check if the file entry exists in the storage.
+	if _, ok := files[fileID]; !ok {
+		return fmt.Errorf("%w for user login %s: %s", ErrFileNotFound, userID, fileID)
+	}
+
+	// Delete file from the storage.
+	delete(s.files[userID], fileID)
+
+	return nil
+}

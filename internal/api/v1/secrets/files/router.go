@@ -15,7 +15,7 @@ type config struct {
 }
 
 // NewRouter creates a new files API router.
-func NewRouter(svc filesvc.Service, opts ...Option) chi.Router {
+func NewRouter(svc *filesvc.Service, opts ...Option) chi.Router {
 	cfg := &config{
 		logger: slog.New(&slog.JSONHandler{}),
 	}
@@ -24,12 +24,12 @@ func NewRouter(svc filesvc.Service, opts ...Option) chi.Router {
 		opt(cfg)
 	}
 
-	// h := NewHandlers(svc, WithLogger(opts.Logger))
+	h := NewHandlers(svc, WithHandlersLogger(cfg.logger))
 
 	r := chi.NewRouter()
 
 	return r.Group(func(r chi.Router) {
-		// r.Post("/", h.CreateFile)
+		r.Post("/", h.CreateFile)
 		// r.Get("/", h.ListFiles)
 		// r.Get("/{fileID}", h.GetFile)
 		// r.Put("/{fileID}", h.UpdateFile)

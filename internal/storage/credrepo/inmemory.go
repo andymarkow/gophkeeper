@@ -75,23 +75,24 @@ func (s *InMemory) GetCredential(_ context.Context, userLogin, credID string) (*
 	return nil, fmt.Errorf("%w for user login %s: %s", ErrCredNotFound, userLogin, credID)
 }
 
-func (s *InMemory) ListCredentials(_ context.Context, userLogin string) ([]string, error) {
+func (s *InMemory) ListCredentials(_ context.Context, userLogin string) ([]*credential.Credential, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
 	// Check if the user login entry exists in the storage.
 	creds, ok := s.creds[userLogin]
 	if !ok {
-		return []string{}, nil
+		return []*credential.Credential{}, nil
 	}
 
-	credIDs := make([]string, 0, len(creds))
+	credsList := make([]*credential.Credential, 0, len(creds))
 
-	for credID := range creds {
-		credIDs = append(credIDs, credID)
+	for _, cred := range creds {
+		cr := cred
+		credsList = append(credsList, &cr)
 	}
 
-	return credIDs, nil
+	return credsList, nil
 }
 
 // UpdateCredential updates a credential in the storage.

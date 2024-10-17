@@ -7,7 +7,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
-	"slices"
+	"sort"
 
 	"github.com/go-chi/chi/v5"
 
@@ -77,6 +77,7 @@ func (h *Handlers) CreateCard(w http.ResponseWriter, req *http.Request) {
 	api.JSONResponse(w, http.StatusCreated, &CreateCardResponse{Message: "ok"})
 }
 
+// processCreateCardRequest processes create card request.
 func (h *Handlers) processCreateCardRequest(ctx context.Context, userID string, payload CreateCardRequest) *httperr.HTTPError {
 	data, err := bankcard.CreateData(payload.Data.Number, payload.Data.Name, payload.Data.CVV, payload.Data.ExpireAt)
 	if err != nil {
@@ -114,6 +115,7 @@ func (h *Handlers) processCreateCardRequest(ctx context.Context, userID string, 
 	return nil
 }
 
+// GetCard handles get card request.
 func (h *Handlers) GetCard(w http.ResponseWriter, req *http.Request) {
 	userID := req.Header.Get("X-User-Id")
 	if userID == "" {
@@ -139,6 +141,7 @@ func (h *Handlers) GetCard(w http.ResponseWriter, req *http.Request) {
 	api.JSONResponse(w, http.StatusOK, resp)
 }
 
+// processGetCardRequest processes get card request.
 func (h *Handlers) processGetCardRequest(ctx context.Context, userID, cardID string) (*GetCardResponse, *httperr.HTTPError) {
 	card, err := h.storage.GetCard(ctx, userID, cardID)
 	if err != nil {
@@ -163,8 +166,10 @@ func (h *Handlers) processGetCardRequest(ctx context.Context, userID, cardID str
 
 	return &GetCardResponse{
 		BankCard: BankCard{
-			ID:       card.ID(),
-			Metadata: card.Metadata(),
+			ID:        card.ID(),
+			Metadata:  card.Metadata(),
+			CreatedAt: card.CreatedAt(),
+			UpdatedAt: card.UpdatedAt(),
 			Data: &Data{
 				Number:   card.Data().Number(),
 				Name:     card.Data().Name(),
@@ -175,6 +180,7 @@ func (h *Handlers) processGetCardRequest(ctx context.Context, userID, cardID str
 	}, nil
 }
 
+// ListCards handles list cards request.
 func (h *Handlers) ListCards(w http.ResponseWriter, req *http.Request) {
 	userID := req.Header.Get("X-User-Id")
 	if userID == "" {
@@ -193,6 +199,7 @@ func (h *Handlers) ListCards(w http.ResponseWriter, req *http.Request) {
 	api.JSONResponse(w, http.StatusOK, resp)
 }
 
+// processListCardsRequest processes list cards request.
 func (h *Handlers) processListCardsRequest(ctx context.Context, userID string) (*ListCardsResponse, *httperr.HTTPError) {
 	cards, err := h.storage.ListCards(ctx, userID)
 	if err != nil {
@@ -201,11 +208,29 @@ func (h *Handlers) processListCardsRequest(ctx context.Context, userID string) (
 		return nil, httperr.NewHTTPError(http.StatusInternalServerError, err)
 	}
 
-	slices.Sort(cards)
+	if cards == nil {
+		return &ListCardsResponse{Cards: []*BankCard{}}, nil
+	}
 
-	return &ListCardsResponse{IDs: cards}, nil
+	crds := make([]*BankCard, 0, len(cards))
+
+	for _, card := range cards {
+		crds = append(crds, &BankCard{
+			ID:        card.ID(),
+			Metadata:  card.Metadata(),
+			CreatedAt: card.CreatedAt(),
+			UpdatedAt: card.UpdatedAt(),
+		})
+	}
+
+	sort.Slice(crds, func(i, j int) bool {
+		return crds[i].ID < crds[j].ID
+	})
+
+	return &ListCardsResponse{Cards: crds}, nil
 }
 
+// UpdateCard handles update card request.
 func (h *Handlers) UpdateCard(w http.ResponseWriter, req *http.Request) {
 	userID := req.Header.Get("X-User-Id")
 	if userID == "" {
@@ -241,6 +266,7 @@ func (h *Handlers) UpdateCard(w http.ResponseWriter, req *http.Request) {
 	api.JSONResponse(w, http.StatusNoContent, nil)
 }
 
+// processUpdateCardRequest processes update card request.
 func (h *Handlers) processUpdateCardRequest(ctx context.Context, userID, cardID string, payload *UpdateCardRequest) *httperr.HTTPError {
 	// Read bank card data from the payload.
 	data, err := bankcard.NewData(payload.Data.Number, payload.Data.Name, payload.Data.CVV, payload.Data.ExpireAt)
@@ -280,6 +306,7 @@ func (h *Handlers) processUpdateCardRequest(ctx context.Context, userID, cardID 
 	return nil
 }
 
+// DeleteCard handles delete card request.
 func (h *Handlers) DeleteCard(w http.ResponseWriter, req *http.Request) {
 	userID := req.Header.Get("X-User-Id")
 	if userID == "" {
@@ -305,6 +332,7 @@ func (h *Handlers) DeleteCard(w http.ResponseWriter, req *http.Request) {
 	api.JSONResponse(w, http.StatusNoContent, nil)
 }
 
+// processDeleteCardRequest processes delete card request.
 func (h *Handlers) processDeleteCardRequest(ctx context.Context, userID, cardID string) *httperr.HTTPError {
 	err := h.storage.DeleteCard(ctx, userID, cardID)
 	if err != nil {
@@ -320,6 +348,7 @@ func (h *Handlers) processDeleteCardRequest(ctx context.Context, userID, cardID 
 	return nil
 }
 
+// readBody reads request body.
 func (h *Handlers) readBody(body io.ReadCloser, v any) *httperr.HTTPError {
 	err := json.NewDecoder(body).Decode(v)
 	if err != nil {

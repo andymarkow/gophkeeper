@@ -1,6 +1,8 @@
 //nolint:tagliatelle
 package bankcards
 
+import "time"
+
 type BankCard struct {
 	// ID represents bank card ID.
 	ID string `json:"id"`
@@ -8,8 +10,14 @@ type BankCard struct {
 	// Metadata represents bank card metadata.
 	Metadata map[string]string `json:"metadata,omitempty"`
 
+	// CreatedAt represents bank card create at.
+	CreatedAt time.Time `json:"created_at,omitempty"`
+
+	// UpdatedAt represents bank card update at.
+	UpdatedAt time.Time `json:"updated_at,omitempty"`
+
 	// Data represents bank card data.
-	Data *Data `json:"data"`
+	Data *Data `json:"data,omitempty"`
 }
 
 // Data represents bank card data.
@@ -45,7 +53,7 @@ type GetCardResponse struct {
 
 // ListCardsResponse represents list bank cards response.
 type ListCardsResponse struct {
-	IDs []string `json:"ids"`
+	Cards []*BankCard `json:"cards"`
 }
 
 // UpdateCardRequest represents update bank card request.

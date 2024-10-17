@@ -7,8 +7,9 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"sort"
 
-	"github.com/go-chi/chi"
+	"github.com/go-chi/chi/v5"
 
 	"github.com/andymarkow/gophkeeper/internal/api"
 	"github.com/andymarkow/gophkeeper/internal/domain/vault/credential"
@@ -182,8 +183,10 @@ func (h *Handlers) processGetCredentialRequest(ctx context.Context, userID, cred
 
 	return &GetCredentialResponse{
 		Credential: Credential{
-			ID:       cred.ID(),
-			Metadata: cred.Metadata(),
+			ID:        cred.ID(),
+			Metadata:  cred.Metadata(),
+			CreatedAt: cred.CreatedAt(),
+			UpdatedAt: cred.UpdatedAt(),
 			Data: &Data{
 				Login:    cred.Data().Login(),
 				Password: cred.Data().Password(),
@@ -201,7 +204,26 @@ func (h *Handlers) processListCredentialsRequest(ctx context.Context, userID str
 		return nil, httperr.NewHTTPError(http.StatusInternalServerError, err)
 	}
 
-	return &ListCredentialsResponse{IDs: creds}, nil
+	if creds == nil {
+		return &ListCredentialsResponse{Creds: []*Credential{}}, nil
+	}
+
+	crds := make([]*Credential, 0, len(creds))
+
+	for _, cred := range creds {
+		crds = append(crds, &Credential{
+			ID:        cred.ID(),
+			Metadata:  cred.Metadata(),
+			CreatedAt: cred.CreatedAt(),
+			UpdatedAt: cred.UpdatedAt(),
+		})
+	}
+
+	sort.Slice(crds, func(i, j int) bool {
+		return crds[i].ID < crds[j].ID
+	})
+
+	return &ListCredentialsResponse{Creds: crds}, nil
 }
 
 // UpdateCredential handles update credentials request.
@@ -240,7 +262,37 @@ func (h *Handlers) UpdateCredential(w http.ResponseWriter, req *http.Request) {
 }
 
 func (h *Handlers) processUpdateCredentialRequest(ctx context.Context, userID, credID string, payload *UpdateCredentialRequest) *httperr.HTTPError {
-	// TODO: Implement.
+	data, err := credential.NewData(payload.Data.Login, payload.Data.Password)
+	if err != nil {
+		h.log.Error("failed to read credentials data", slog.Any("error", err))
+
+		return httperr.NewHTTPError(http.StatusBadRequest, err)
+	}
+
+	encData, err := data.Encrypt(h.cryptoKey)
+	if err != nil {
+		h.log.Error("failed to encrypt credentials data", slog.Any("error", err))
+
+		return httperr.NewHTTPError(http.StatusInternalServerError, err)
+	}
+
+	cred, err := credential.CreateCredential(credID, userID, payload.Metadata, encData)
+	if err != nil {
+		h.log.Error("failed to create credentials", slog.Any("error", err))
+
+		return httperr.NewHTTPError(http.StatusBadRequest, err)
+	}
+
+	if err := h.storage.UpdateCredential(ctx, cred); err != nil {
+		if errors.Is(err, credrepo.ErrCredNotFound) {
+			return httperr.NewHTTPError(http.StatusNotFound, err)
+		}
+
+		h.log.Error("failed to update credentials", slog.Any("error", err))
+
+		return httperr.NewHTTPError(http.StatusInternalServerError, err)
+	}
+
 	return nil
 }
 

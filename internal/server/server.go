@@ -15,9 +15,12 @@ import (
 	"github.com/andymarkow/gophkeeper/internal/server/config"
 	"github.com/andymarkow/gophkeeper/internal/server/httpserver"
 	"github.com/andymarkow/gophkeeper/internal/server/router"
+	"github.com/andymarkow/gophkeeper/internal/services/filesvc"
 	"github.com/andymarkow/gophkeeper/internal/slogger"
 	"github.com/andymarkow/gophkeeper/internal/storage/cardrepo"
 	"github.com/andymarkow/gophkeeper/internal/storage/credrepo"
+	"github.com/andymarkow/gophkeeper/internal/storage/filerepo"
+	"github.com/andymarkow/gophkeeper/internal/storage/objrepo"
 	"github.com/andymarkow/gophkeeper/internal/storage/userrepo"
 )
 
@@ -39,21 +42,35 @@ func NewServer() (*Server, error) {
 
 	logger := slogger.NewLogger(slogger.WithLevel(logLevel))
 
+	objStorage, err := objrepo.NewMinioClient(cfg.ObjStorage.Endpoint, cfg.ObjStorage.Bucket, &objrepo.MinioClientOpts{
+		AccessKeyID:     cfg.ObjStorage.AccessKey,
+		SecretAccessKey: cfg.ObjStorage.SecretKey,
+		UseSSL:          cfg.ObjStorage.UseSSL,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("objrepo.NewMinioClient: %w", err)
+	}
+
+	if err := objStorage.InitBucket(context.Background()); err != nil {
+		return nil, fmt.Errorf("objStorage.InitBucket: %w", err)
+	}
+
+	fileSvc := filesvc.NewService(filerepo.NewInMemory(), objStorage, filesvc.WithLogger(logger))
+
 	router := router.NewRouter(
 		userrepo.NewInMemory(),
 		cardrepo.NewInMemory(),
 		credrepo.NewInMemory(),
-		[]byte(cfg.JWTSecret),
-		[]byte(cfg.CryptoKey),
+		fileSvc,
+		router.WithJWTSecret([]byte(cfg.JWTSecret)),
+		router.WithCryptoKey([]byte(cfg.CryptoKey)),
 		router.WithLogger(logger),
 	)
 
-	server := &Server{
+	return &Server{
 		log:     logger,
 		httpsrv: httpserver.NewHTTPServer(router, httpserver.WithLogger(logger)),
-	}
-
-	return server, nil
+	}, nil
 }
 
 func (s *Server) Run() error {

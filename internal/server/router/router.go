@@ -11,8 +11,10 @@ import (
 
 	"github.com/andymarkow/gophkeeper/internal/api/v1/secrets/bankcards"
 	"github.com/andymarkow/gophkeeper/internal/api/v1/secrets/credentials"
+	"github.com/andymarkow/gophkeeper/internal/api/v1/secrets/files"
 	"github.com/andymarkow/gophkeeper/internal/api/v1/users"
 	"github.com/andymarkow/gophkeeper/internal/middlewares"
+	"github.com/andymarkow/gophkeeper/internal/services/filesvc"
 	"github.com/andymarkow/gophkeeper/internal/storage/cardrepo"
 	"github.com/andymarkow/gophkeeper/internal/storage/credrepo"
 	"github.com/andymarkow/gophkeeper/internal/storage/userrepo"
@@ -20,12 +22,14 @@ import (
 
 // options represents the options for the API.
 type options struct {
-	logger *slog.Logger
+	logger    *slog.Logger
+	jwtSecret []byte
+	cryptoKey []byte
 }
 
 // NewRouter creates a new API router.
 func NewRouter(userStorage userrepo.Storage, cardStorage cardrepo.Storage,
-	credStorage credrepo.Storage, jwtSecret []byte, cryproKey []byte, opts ...Option,
+	credStorage credrepo.Storage, fileSvc *filesvc.Service, opts ...Option,
 ) chi.Router {
 	defOpts := &options{
 		logger: slog.New(&slog.JSONHandler{}),
@@ -35,17 +39,19 @@ func NewRouter(userStorage userrepo.Storage, cardStorage cardrepo.Storage,
 		opt(defOpts)
 	}
 
-	jwtAuth := jwtauth.New("HS256", jwtSecret, nil)
+	jwtAuth := jwtauth.New("HS256", defOpts.jwtSecret, nil)
 
-	usersAPI := users.NewRouter(userStorage, jwtSecret, &users.Options{
+	usersAPI := users.NewRouter(userStorage, defOpts.jwtSecret, &users.Options{
 		Logger: defOpts.logger,
 	})
 
-	cardsAPI := bankcards.NewRouter(cardStorage, cryproKey, &bankcards.Options{
+	cardsAPI := bankcards.NewRouter(cardStorage, defOpts.cryptoKey, &bankcards.Options{
 		Logger: defOpts.logger,
 	})
 
-	credAPI := credentials.NewRouter(credStorage, cryproKey, credentials.WithRouterLogger(defOpts.logger))
+	credsAPI := credentials.NewRouter(credStorage, defOpts.cryptoKey, credentials.WithRouterLogger(defOpts.logger))
+
+	filesAPI := files.NewRouter(fileSvc, files.WithLogger(defOpts.logger))
 
 	r := chi.NewRouter()
 
@@ -66,8 +72,8 @@ func NewRouter(userStorage userrepo.Storage, cardStorage cardrepo.Storage,
 			r.Use(middlewares.UserID)
 
 			r.Mount("/bankcards", cardsAPI)
-			r.Mount("/credentials", credAPI)
-			// r.Mount("/generics", )
+			r.Mount("/credentials", credsAPI)
+			r.Mount("/files", filesAPI)
 		})
 	})
 
@@ -81,5 +87,19 @@ type Option func(*options)
 func WithLogger(logger *slog.Logger) Option {
 	return func(o *options) {
 		o.logger = logger
+	}
+}
+
+// WithJWTSecret sets the JWT secret for the API.
+func WithJWTSecret(jwtSecret []byte) Option {
+	return func(o *options) {
+		o.jwtSecret = jwtSecret
+	}
+}
+
+// WithCryptoKey sets the crypto key for the API.
+func WithCryptoKey(cryptoKey []byte) Option {
+	return func(o *options) {
+		o.cryptoKey = cryptoKey
 	}
 }

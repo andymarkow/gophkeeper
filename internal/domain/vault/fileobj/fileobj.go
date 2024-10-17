@@ -10,18 +10,19 @@ import (
 
 // File represents a file object.
 type File struct {
-	id       string
-	userID   string
-	name     string
-	metadata map[string]string
-	createAt time.Time
-	updateAt time.Time
-	url      url.URL
-	checksum uint32
+	id        string
+	userID    string
+	name      string
+	checksum  string
+	metadata  map[string]string
+	createdAt time.Time
+	updatedAt time.Time
+	location  *url.URL
 }
 
 // NewFile creates a new file object.
-func NewFile(id, userID, name string, metadata map[string]string, createAt, updateAt time.Time, url url.URL, checksum uint32) (*File, error) {
+func NewFile(id, userID, name string, metadata map[string]string,
+	createdAt, updatedAt time.Time, location *url.URL, checksum string) (*File, error) {
 	if id == "" {
 		return nil, fmt.Errorf("id must not be empty")
 	}
@@ -35,14 +36,14 @@ func NewFile(id, userID, name string, metadata map[string]string, createAt, upda
 	}
 
 	return &File{
-		id:       id,
-		userID:   userID,
-		name:     name,
-		metadata: metadata,
-		createAt: createAt,
-		updateAt: updateAt,
-		url:      url,
-		checksum: checksum,
+		id:        id,
+		userID:    userID,
+		name:      name,
+		metadata:  metadata,
+		createdAt: createdAt,
+		updatedAt: updatedAt,
+		location:  location,
+		checksum:  checksum,
 	}, nil
 }
 
@@ -66,22 +67,22 @@ func (f *File) Metadata() map[string]string {
 	return f.metadata
 }
 
-// CreateAt returns the create at of the file object.
-func (f *File) CreateAt() time.Time {
-	return f.createAt
+// CreatedAt returns the create at of the file object.
+func (f *File) CreatedAt() time.Time {
+	return f.createdAt
 }
 
-// UpdateAt returns the update at of the file object.
-func (f *File) UpdateAt() time.Time {
-	return f.updateAt
+// UpdatedAt returns the update at of the file object.
+func (f *File) UpdatedAt() time.Time {
+	return f.updatedAt
 }
 
-// URL returns the download url of the file object.
-func (f *File) URL() url.URL {
-	return f.url
+// Location returns the download url of the file object.
+func (f *File) Location() *url.URL {
+	return f.location
 }
 
 // Checksum returns the checksum of the file object.
-func (f *File) Checksum() uint32 {
+func (f *File) Checksum() string {
 	return f.checksum
 }

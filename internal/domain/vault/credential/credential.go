@@ -13,7 +13,7 @@ type Credential struct {
 	id        string
 	userID    string
 	metadata  map[string]string
-	createAt  time.Time
+	createdAt time.Time
 	updatedAt time.Time
 	data      *Data
 }
@@ -39,12 +39,17 @@ func NewData(login, password string) (*Data, error) {
 	}, nil
 }
 
+// NewEmptyData creates a new empty data.
+func NewEmptyData() *Data {
+	return &Data{}
+}
+
 func CreateCredential(id, userID string, metadata map[string]string, data *Data) (*Credential, error) {
 	return NewCredential(id, userID, metadata, time.Now(), time.Now(), data)
 }
 
 // NewCredential creates a new credential.
-func NewCredential(id, userID string, metadata map[string]string, createAt, updateAt time.Time, data *Data) (*Credential, error) {
+func NewCredential(id, userID string, metadata map[string]string, createdAt, updatedAt time.Time, data *Data) (*Credential, error) {
 	if id == "" {
 		return nil, fmt.Errorf("id must not be empty")
 	}
@@ -61,8 +66,8 @@ func NewCredential(id, userID string, metadata map[string]string, createAt, upda
 		id:        id,
 		userID:    userID,
 		metadata:  metadata,
-		createAt:  createAt,
-		updatedAt: updateAt,
+		createdAt: createdAt,
+		updatedAt: updatedAt,
 		data:      data,
 	}, nil
 }
@@ -82,9 +87,9 @@ func (c *Credential) Metadata() map[string]string {
 	return c.metadata
 }
 
-// CreateAt returns the create at of the credential.
-func (c *Credential) CreateAt() time.Time {
-	return c.createAt
+// CreatedAt returns the create at of the credential.
+func (c *Credential) CreatedAt() time.Time {
+	return c.createdAt
 }
 
 // UpdatedAt returns the update at of the credential.
@@ -114,12 +119,12 @@ func (d *Data) Password() string {
 
 // Encrypt encrypts credential data with the given key.
 func (d *Data) Encrypt(key []byte) (*Data, error) {
-	login, err := cryptutils.EncryptString(d.login, key)
+	login, err := cryptutils.EncryptString(key, d.login)
 	if err != nil {
 		return nil, fmt.Errorf("failed to encrypt login: %w", err)
 	}
 
-	password, err := cryptutils.EncryptString(d.password, key)
+	password, err := cryptutils.EncryptString(key, d.password)
 	if err != nil {
 		return nil, fmt.Errorf("failed to encrypt password: %w", err)
 	}
@@ -132,12 +137,12 @@ func (d *Data) Encrypt(key []byte) (*Data, error) {
 
 // Decrypt decrypts credential data with the given key.
 func (d *Data) Decrypt(key []byte) (*Data, error) {
-	login, err := cryptutils.DecryptString(d.login, key)
+	login, err := cryptutils.DecryptString(key, d.login)
 	if err != nil {
 		return nil, fmt.Errorf("failed to decrypt login: %w", err)
 	}
 
-	password, err := cryptutils.DecryptString(d.password, key)
+	password, err := cryptutils.DecryptString(key, d.password)
 	if err != nil {
 		return nil, fmt.Errorf("failed to decrypt password: %w", err)
 	}

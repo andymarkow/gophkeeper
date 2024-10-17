@@ -13,7 +13,7 @@ var _ Storage = (*InMemory)(nil)
 type Storage interface {
 	AddCredential(ctx context.Context, cred *credential.Credential) error
 	GetCredential(ctx context.Context, userLogin, credID string) (*credential.Credential, error)
-	ListCredentials(ctx context.Context, userLogin string) ([]string, error)
+	ListCredentials(ctx context.Context, userLogin string) ([]*credential.Credential, error)
 	UpdateCredential(ctx context.Context, cred *credential.Credential) error
 	DeleteCredential(ctx context.Context, userLogin string, credID string) error
 }

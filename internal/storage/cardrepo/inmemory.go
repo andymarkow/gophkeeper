@@ -77,45 +77,25 @@ func (s *InMemory) GetCard(_ context.Context, userLogin, cardID string) (*bankca
 	return nil, fmt.Errorf("%w for user login %s: %s", ErrCardNotFound, userLogin, cardID)
 }
 
-// GetAllCards returns a list of bank cards from the storage.
-func (s *InMemory) GetAllCards(_ context.Context, userLogin string) ([]*bankcard.BankCard, error) {
+// ListCards returns a list of bank card IDs from the storage.
+func (s *InMemory) ListCards(_ context.Context, userLogin string) ([]*bankcard.BankCard, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-
-	cardEntries := make([]*bankcard.BankCard, 0)
 
 	// Check if the user login entry exists in the storage.
 	cards, ok := s.cards[userLogin]
 	if !ok {
-		return cardEntries, nil
+		return []*bankcard.BankCard{}, nil
 	}
+
+	cardsList := make([]*bankcard.BankCard, 0, len(cards))
 
 	for _, card := range cards {
 		crd := card
-		cardEntries = append(cardEntries, &crd)
+		cardsList = append(cardsList, &crd)
 	}
 
-	return cardEntries, nil
-}
-
-// ListCards returns a list of bank card IDs from the storage.
-func (s *InMemory) ListCards(_ context.Context, userLogin string) ([]string, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	// Check if the user login entry exists in the storage.
-	cards, ok := s.cards[userLogin]
-	if !ok {
-		return []string{}, nil
-	}
-
-	cardIDs := make([]string, 0, len(cards))
-
-	for cardID := range cards {
-		cardIDs = append(cardIDs, cardID)
-	}
-
-	return cardIDs, nil
+	return cardsList, nil
 }
 
 // UpdateCard updates a bank card in the storage.

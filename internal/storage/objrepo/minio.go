@@ -4,10 +4,13 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net/url"
 
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
 )
+
+var _ Storage = (*MinioClient)(nil)
 
 // MinioClient represents a minio client.
 type MinioClient struct {
@@ -67,24 +70,34 @@ func (c *MinioClient) InitBucket(ctx context.Context) error {
 	return nil
 }
 
-// GetObject gets an object from the bucket.
-func (c *MinioClient) GetObject(ctx context.Context, objName string) (*minio.Object, error) {
-	info, err := c.client.GetObject(ctx, c.bucket, objName, minio.GetObjectOptions{})
+// GetObject gets an object data from the bucket.
+func (c *MinioClient) GetObject(ctx context.Context, objName string) (io.ReadSeekCloser, error) {
+	obj, err := c.client.GetObject(ctx, c.bucket, objName, minio.GetObjectOptions{})
 	if err != nil {
 		return nil, fmt.Errorf("client.GetObject: %w", err)
 	}
 
-	return info, nil
+	return obj, nil
 }
 
-// PutObject puts an object into the bucket.
-func (c *MinioClient) PutObject(ctx context.Context, objName string, objSize int64, rd io.Reader) (*minio.UploadInfo, error) {
+// PutObject puts an object data into the bucket.
+func (c *MinioClient) PutObject(ctx context.Context, objName string, objSize int64, rd io.Reader) (*ObjectInfo, error) {
 	info, err := c.client.PutObject(ctx, c.bucket, objName, rd, objSize, minio.PutObjectOptions{})
 	if err != nil {
 		return nil, fmt.Errorf("client.PutObject: %w", err)
 	}
 
-	return &info, nil
+	objUrl, err := url.Parse(info.Location)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse object location URL: %w", err)
+	}
+
+	objInfo, err := NewObjectInfo(objName, info.ChecksumCRC32C, info.Size, objUrl)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create object info: %w", err)
+	}
+
+	return objInfo, nil
 }
 
 // RemoveObject removes an object from the bucket.

@@ -13,6 +13,15 @@ type Config struct {
 	LogLevel   string
 	JWTSecret  string
 	CryptoKey  string
+	ObjStorage *objectStorage
+}
+
+type objectStorage struct {
+	Endpoint  string
+	AccessKey string
+	SecretKey string
+	Bucket    string
+	UseSSL    bool
 }
 
 func NewConfig() (*Config, error) {
@@ -25,6 +34,13 @@ func NewConfig() (*Config, error) {
 		LogLevel:   viper.GetString("log-level"),
 		JWTSecret:  viper.GetString("jwt-secret"),
 		CryptoKey:  viper.GetString("crypto-key"),
+		ObjStorage: &objectStorage{
+			Endpoint:  viper.GetString("s3-endpoint"),
+			AccessKey: viper.GetString("s3-access-key"),
+			SecretKey: viper.GetString("s3-secret-key"),
+			Bucket:    viper.GetString("s3-bucket"),
+			UseSSL:    viper.GetBool("s3-use-ssl"),
+		},
 	}
 
 	return cfg, nil
@@ -36,6 +52,11 @@ func initConfig() error {
 	pflag.StringP("log-level", "l", "", "log level")
 	pflag.String("jwt-secret", "", "JWT secret used for token generation and verification")
 	pflag.String("crypto-key", "", "crypto key used for data encryption and decryption")
+	pflag.String("s3-endpoint", "", "S3 object storage endpoint")
+	pflag.String("s3-access-key", "", "S3 object storage access key")
+	pflag.String("s3-secret-key", "", "S3 object storage secret key")
+	pflag.String("s3-bucket", "", "S3 object storage bucket")
+	pflag.Bool("s3-use-ssl", false, "S3 object storage use SSL")
 	pflag.Parse()
 
 	if err := viper.BindPFlags(pflag.CommandLine); err != nil {
@@ -72,6 +93,9 @@ func setDefaults() {
 	viper.SetDefault("log-level", "info")
 	viper.SetDefault("jwt-secret", "topsecretkey")
 	viper.SetDefault("crypto-key", "123456789abcdefg")
+	viper.SetDefault("s3-endpoint", "localhost:9000")
+	viper.SetDefault("s3-bucket", "vault")
+
 }
 
 func bindEnvs() error {
@@ -92,6 +116,26 @@ func bindEnvs() error {
 	}
 
 	if err := viper.BindEnv("crypto-key", "KEEPER_CRYPTO_KEY"); err != nil {
+		return fmt.Errorf("viper.BindEnv: %w", err)
+	}
+
+	if err := viper.BindEnv("s3-endpoint", "KEEPER_S3_ENDPOINT"); err != nil {
+		return fmt.Errorf("viper.BindEnv: %w", err)
+	}
+
+	if err := viper.BindEnv("s3-access-key", "KEEPER_S3_ACCESS_KEY"); err != nil {
+		return fmt.Errorf("viper.BindEnv: %w", err)
+	}
+
+	if err := viper.BindEnv("s3-secret-key", "KEEPER_S3_SECRET_KEY"); err != nil {
+		return fmt.Errorf("viper.BindEnv: %w", err)
+	}
+
+	if err := viper.BindEnv("s3-bucket", "KEEPER_S3_BUCKET"); err != nil {
+		return fmt.Errorf("viper.BindEnv: %w", err)
+	}
+
+	if err := viper.BindEnv("s3-use-ssl", "KEEPER_S3_USE_SSL"); err != nil {
 		return fmt.Errorf("viper.BindEnv: %w", err)
 	}
 

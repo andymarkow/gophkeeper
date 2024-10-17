@@ -1,5 +1,7 @@
 package credentials
 
+import "time"
+
 // Credential represents credentials.
 type Credential struct {
 	// ID represents credential id.
@@ -8,8 +10,14 @@ type Credential struct {
 	// Metadata represents credential metadata.
 	Metadata map[string]string `json:"metadata,omitempty"`
 
+	// CreatedAt represents credential creation time.
+	CreatedAt time.Time `json:"created_at,omitempty"`
+
+	// UpdatedAt represents credential update time.
+	UpdatedAt time.Time `json:"updated_at,omitempty"`
+
 	// Data represents credential data.
-	Data *Data `json:"data"`
+	Data *Data `json:"data,omitempty"`
 }
 
 // Data represents credentials data.
@@ -33,7 +41,7 @@ type CreateCredentialResponse struct {
 
 // ListCredentialsResponse represents a response to list credentials.
 type ListCredentialsResponse struct {
-	IDs []string `json:"ids"`
+	Creds []*Credential `json:"credentials"`
 }
 
 // GetCredentialResponse represents a response to get credential.

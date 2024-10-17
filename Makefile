@@ -7,6 +7,8 @@
 .EXPORT_ALL_VARIABLES:
 
 LOG_LEVEL=debug
+KEEPER_S3_ACCESS_KEY=minioadmin
+KEEPER_S3_SECRET_KEY=minioadmin
 
 .PHONY: all
 all: fmt tidy vet test lint
