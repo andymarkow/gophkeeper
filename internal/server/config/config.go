@@ -95,7 +95,6 @@ func setDefaults() {
 	viper.SetDefault("crypto-key", "123456789abcdefg")
 	viper.SetDefault("s3-endpoint", "localhost:9000")
 	viper.SetDefault("s3-bucket", "vault")
-
 }
 
 func bindEnvs() error {

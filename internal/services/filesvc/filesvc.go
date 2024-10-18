@@ -14,17 +14,20 @@ import (
 	"github.com/andymarkow/gophkeeper/internal/storage/objrepo"
 )
 
-// Service represents the service.
-type Service struct {
+var _ Service = (*FileService)(nil)
+
+// FileService represents the service.
+type FileService struct {
 	log         *slog.Logger
 	fileStorage filerepo.Storage
 	objStorage  objrepo.Storage
+	objBasePath string
 	cryptoKey   string
 }
 
-// NewService creates a new service.
-func NewService(filestore filerepo.Storage, objstore objrepo.Storage, opts ...Option) *Service {
-	svc := &Service{
+// NewFileService creates a new service.
+func NewFileService(filestore filerepo.Storage, objstore objrepo.Storage, opts ...Option) *FileService {
+	svc := &FileService{
 		log:         slog.New(&slog.JSONHandler{}),
 		fileStorage: filestore,
 		objStorage:  objstore,
@@ -38,48 +41,78 @@ func NewService(filestore filerepo.Storage, objstore objrepo.Storage, opts ...Op
 }
 
 // Option is a functional option for the service.
-type Option func(*Service)
+type Option func(*FileService)
 
 // WithLogger sets the logger for the service.
 func WithLogger(log *slog.Logger) Option {
-	return func(s *Service) {
+	return func(s *FileService) {
 		s.log = log
 	}
 }
 
 // WithCryptoKey sets the crypto key for the service.
 func WithCryptoKey(key string) Option {
-	return func(s *Service) {
+	return func(s *FileService) {
 		s.cryptoKey = key
 	}
 }
 
-func (s *Service) CreateFile(ctx context.Context, file *fileobj.File, objName string, data io.Reader) (any, error) {
+// WithObjectBasePath sets the object base path for the service.
+func WithObjectBasePath(path string) Option {
+	return func(s *FileService) {
+		s.objBasePath = path
+	}
+}
+
+type CreateFileRequest struct {
+	Name     string
+	Checksum string
+	Size     int64
+	Metadata map[string]string
+	Data     io.Reader
+}
+
+func (s *FileService) CreateFile(ctx context.Context, userID, objID string, req CreateFileRequest) (*fileobj.File, error) {
+	// TODO: Check file checksum before uploading.
+	_ = req.Checksum
+
 	// Create encrypted file data stream.
-	stream, err := cryptutils.EncryptStream(s.cryptoKey, data)
+	stream, err := cryptutils.EncryptStream(s.cryptoKey, req.Data)
 	if err != nil {
 		return nil, fmt.Errorf("cryptutils.EncryptStream: %w", err)
 	}
 
+	objName := s.getObjName(userID, objID)
+
 	// Put the file data to the object storage.
-	info, err := s.objStorage.PutObject(ctx, objName, -1, stream)
+	info, err := s.objStorage.PutObject(ctx, objName, req.Size, stream)
 	if err != nil {
 		return nil, fmt.Errorf("storage.PutObject: %w", err)
 	}
 
 	// Create new file object entry to store it in the file storage.
 	repoFile, err := fileobj.NewFile(
-		file.ID(), file.UserID(), file.Name(), file.Metadata(),
-		time.Now(), time.Now(), info.Location(), info.CRC32C())
+		objID, userID, req.Name, info.CRC32C(), info.Size(),
+		req.Metadata, time.Now(), time.Now(), info.Location())
 	if err != nil {
 		return nil, fmt.Errorf("fileobj.NewFile: %w", err)
 	}
 
 	// Store the file object entry in the file storage.
-	err = s.fileStorage.AddFile(ctx, repoFile)
+	file, err := s.fileStorage.AddFile(ctx, repoFile)
 	if err != nil {
 		return nil, fmt.Errorf("storage.AddFile: %w", err)
 	}
 
-	return info, nil
+	return file, nil
+}
+
+func (s *FileService) getObjName(userID, objID string) string {
+	objName := fmt.Sprintf("%s/%s", userID, objID)
+
+	if s.objBasePath != "" {
+		objName = fmt.Sprintf("%s/%s", s.objBasePath, objName)
+	}
+
+	return objName
 }

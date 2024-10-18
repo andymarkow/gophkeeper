@@ -87,12 +87,12 @@ func (c *MinioClient) PutObject(ctx context.Context, objName string, objSize int
 		return nil, fmt.Errorf("client.PutObject: %w", err)
 	}
 
-	objUrl, err := url.Parse(info.Location)
+	objLoc, err := url.Parse(info.Location)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse object location URL: %w", err)
 	}
 
-	objInfo, err := NewObjectInfo(objName, info.ChecksumCRC32C, info.Size, objUrl)
+	objInfo, err := NewObjectInfo(objName, info.ChecksumCRC32C, info.Size, objLoc)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create object info: %w", err)
 	}

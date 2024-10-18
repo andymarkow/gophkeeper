@@ -82,20 +82,22 @@ func EncryptStream(passphrase string, rd io.Reader) (io.Reader, error) {
 		return nil, fmt.Errorf("aes.NewCipher: %w", err)
 	}
 
-	gcm, err := cipher.NewGCM(block)
-	if err != nil {
-		return nil, fmt.Errorf("cipher.NewGCM: %w", err)
-	}
+	// gcm, err := cipher.NewGCM(block)
+	// if err != nil {
+	// 	return nil, fmt.Errorf("cipher.NewGCM: %w", err)
+	// }
 
-	nonce := make([]byte, gcm.NonceSize())
+	nonce := make([]byte, block.BlockSize())
 	_, err = io.ReadFull(rand.Reader, nonce)
 	if err != nil {
 		return nil, fmt.Errorf("io.ReadFull: %w", err)
 	}
 
+	stream := cipher.NewCTR(block, nonce)
+
 	// Create encrypted stream reader.
 	encryptReader := cipher.StreamReader{
-		S: cipher.NewCTR(block, nonce),
+		S: stream,
 		R: io.MultiReader(bytes.NewReader(salt), bytes.NewReader(nonce), rd),
 	}
 

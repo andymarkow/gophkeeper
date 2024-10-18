@@ -14,6 +14,7 @@ type File struct {
 	userID    string
 	name      string
 	checksum  string
+	size      int64
 	metadata  map[string]string
 	createdAt time.Time
 	updatedAt time.Time
@@ -21,8 +22,8 @@ type File struct {
 }
 
 // NewFile creates a new file object.
-func NewFile(id, userID, name string, metadata map[string]string,
-	createdAt, updatedAt time.Time, location *url.URL, checksum string) (*File, error) {
+func NewFile(id, userID, name, checksum string, size int64, metadata map[string]string,
+	createdAt, updatedAt time.Time, location *url.URL) (*File, error) {
 	if id == "" {
 		return nil, fmt.Errorf("id must not be empty")
 	}
@@ -39,11 +40,12 @@ func NewFile(id, userID, name string, metadata map[string]string,
 		id:        id,
 		userID:    userID,
 		name:      name,
+		checksum:  checksum,
+		size:      size,
 		metadata:  metadata,
 		createdAt: createdAt,
 		updatedAt: updatedAt,
 		location:  location,
-		checksum:  checksum,
 	}, nil
 }
 
@@ -60,6 +62,16 @@ func (f *File) UserID() string {
 // Name returns the name of the file object.
 func (f *File) Name() string {
 	return f.name
+}
+
+// Checksum returns the checksum of the file object.
+func (f *File) Checksum() string {
+	return f.checksum
+}
+
+// Size returns the size of the file object.
+func (f *File) Size() int64 {
+	return f.size
 }
 
 // Metadata returns the metadata of the file object.
@@ -80,9 +92,4 @@ func (f *File) UpdatedAt() time.Time {
 // Location returns the download url of the file object.
 func (f *File) Location() *url.URL {
 	return f.location
-}
-
-// Checksum returns the checksum of the file object.
-func (f *File) Checksum() string {
-	return f.checksum
 }

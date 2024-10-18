@@ -3,6 +3,8 @@ package credentials
 import "time"
 
 // Credential represents credentials.
+//
+//nolint:tagliatelle
 type Credential struct {
 	// ID represents credential id.
 	ID string `json:"id"`

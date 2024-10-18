@@ -24,7 +24,7 @@ func NewInMemory() *InMemory {
 }
 
 // AddFile adds a new file to the storage.
-func (s *InMemory) AddFile(_ context.Context, file *fileobj.File) error {
+func (s *InMemory) AddFile(_ context.Context, file *fileobj.File) (*fileobj.File, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -40,18 +40,18 @@ func (s *InMemory) AddFile(_ context.Context, file *fileobj.File) error {
 		// UserID does not exist in the storage. Add user login and file to the storage.
 		s.files[file.UserID()][file.ID()] = *file
 
-		return nil
+		return file, nil
 	}
 
 	if _, ok := files[file.ID()]; ok {
 		// File already exists in the storage.
-		return fmt.Errorf("%w: %s", ErrFileAlreadyExists, file.ID())
+		return nil, fmt.Errorf("%w: %s", ErrFileAlreadyExists, file.ID())
 	}
 
 	// Add file to the storage.
 	s.files[file.UserID()][file.ID()] = *file
 
-	return nil
+	return file, nil
 }
 
 // GetFile returns a file from the storage.

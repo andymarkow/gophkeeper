@@ -29,7 +29,7 @@ type options struct {
 
 // NewRouter creates a new API router.
 func NewRouter(userStorage userrepo.Storage, cardStorage cardrepo.Storage,
-	credStorage credrepo.Storage, fileSvc *filesvc.Service, opts ...Option,
+	credStorage credrepo.Storage, fileSvc filesvc.Service, opts ...Option,
 ) chi.Router {
 	defOpts := &options{
 		logger: slog.New(&slog.JSONHandler{}),

@@ -55,7 +55,13 @@ func NewServer() (*Server, error) {
 		return nil, fmt.Errorf("objStorage.InitBucket: %w", err)
 	}
 
-	fileSvc := filesvc.NewService(filerepo.NewInMemory(), objStorage, filesvc.WithLogger(logger))
+	fileSvc := filesvc.NewFileService(
+		filerepo.NewInMemory(),
+		objStorage,
+		filesvc.WithLogger(logger),
+		filesvc.WithCryptoKey(cfg.CryptoKey),
+		filesvc.WithObjectBasePath("files"),
+	)
 
 	router := router.NewRouter(
 		userrepo.NewInMemory(),

@@ -10,7 +10,15 @@ type Service struct {
 
 // NewService creates a new service.
 func NewService(opts ...Option) (*Service, error) {
-	return nil, nil
+	svc := &Service{
+		log: slog.New(&slog.JSONHandler{}),
+	}
+
+	for _, opt := range opts {
+		opt(svc)
+	}
+
+	return svc, nil
 }
 
 // Option is a functional option for the service.
