@@ -59,7 +59,7 @@ func NewServer() (*Server, error) {
 		filerepo.NewInMemory(),
 		objStorage,
 		filesvc.WithLogger(logger),
-		filesvc.WithCryptoKey(cfg.CryptoKey),
+		filesvc.WithCryptoKey([]byte(cfg.CryptoKey)),
 		filesvc.WithObjectBasePath("files"),
 	)
 

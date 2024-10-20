@@ -14,6 +14,6 @@ type Storage interface {
 	AddFile(ctx context.Context, file *fileobj.File) (*fileobj.File, error)
 	GetFile(ctx context.Context, userLogin, fileID string) (*fileobj.File, error)
 	ListFiles(ctx context.Context, userLogin string) ([]*fileobj.File, error)
-	UpdateFile(ctx context.Context, file *fileobj.File) error
+	UpdateFile(ctx context.Context, file *fileobj.File) (*fileobj.File, error)
 	DeleteFile(ctx context.Context, userLogin string, fileID string) error
 }

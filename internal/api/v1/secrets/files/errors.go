@@ -8,6 +8,5 @@ import (
 )
 
 var (
-	ErrResIDEmpty    = httperr.NewHTTPError(http.StatusBadRequest, errors.New("resource ID is empty"))
-	ErrChecksumEmpty = httperr.NewHTTPError(http.StatusBadRequest, errors.New("checksum is empty"))
+	ErrFileIDEmpty = httperr.NewHTTPError(http.StatusBadRequest, errors.New("file ID is empty"))
 )

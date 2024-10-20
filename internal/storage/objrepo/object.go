@@ -2,19 +2,18 @@ package objrepo
 
 import (
 	"fmt"
-	"net/url"
 )
 
 // ObjectInfo represents an object info.
 type ObjectInfo struct {
 	name     string
 	crc32c   string
+	location string
 	size     int64
-	location *url.URL
 }
 
 // NewObjectInfo creates a new object info.
-func NewObjectInfo(name, crc32c string, size int64, location *url.URL) (*ObjectInfo, error) {
+func NewObjectInfo(name, crc32c, location string, size int64) (*ObjectInfo, error) {
 	if name == "" {
 		return nil, fmt.Errorf("object name is empty")
 	}
@@ -22,8 +21,8 @@ func NewObjectInfo(name, crc32c string, size int64, location *url.URL) (*ObjectI
 	return &ObjectInfo{
 		name:     name,
 		crc32c:   crc32c,
-		size:     size,
 		location: location,
+		size:     size,
 	}, nil
 }
 
@@ -37,12 +36,12 @@ func (o *ObjectInfo) CRC32C() string {
 	return o.crc32c
 }
 
+// Location returns the download url of the object.
+func (o *ObjectInfo) Location() string {
+	return o.location
+}
+
 // Size returns the size of the object.
 func (o *ObjectInfo) Size() int64 {
 	return o.size
-}
-
-// Location returns the download url of the object.
-func (o *ObjectInfo) Location() *url.URL {
-	return o.location
 }

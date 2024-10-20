@@ -30,10 +30,12 @@ func NewRouter(svc filesvc.Service, opts ...Option) chi.Router {
 
 	return r.Group(func(r chi.Router) {
 		r.Post("/", h.CreateFile)
-		// r.Get("/", h.ListFiles)
-		// r.Get("/{fileID}", h.GetFile)
-		// r.Put("/{fileID}", h.UpdateFile)
-		// r.Delete("/{fileID}", h.DeleteFile)
+		r.Get("/", h.ListFiles)
+		r.Get("/{fileID}", h.GetFile)
+		r.Patch("/{fileID}", h.UpdateFile)
+		r.Delete("/{fileID}", h.DeleteFile)
+		r.Post("/{fileID}/upload", h.UploadFile)
+		r.Get("/{fileID}/download", h.DownloadFile)
 	})
 }
 

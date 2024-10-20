@@ -90,7 +90,7 @@ func readConfigFile(cfgFile string) error {
 
 func setDefaults() {
 	viper.SetDefault("address", ":8080")
-	viper.SetDefault("log-level", "info")
+	viper.SetDefault("log-level", "debug")
 	viper.SetDefault("jwt-secret", "topsecretkey")
 	viper.SetDefault("crypto-key", "123456789abcdefg")
 	viper.SetDefault("s3-endpoint", "localhost:9000")

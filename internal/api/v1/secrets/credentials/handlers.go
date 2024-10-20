@@ -134,6 +134,37 @@ func (h *Handlers) ListCredentials(w http.ResponseWriter, req *http.Request) {
 	api.JSONResponse(w, http.StatusOK, resp)
 }
 
+// processListCredentialsRequest processes list credentials request.
+func (h *Handlers) processListCredentialsRequest(ctx context.Context, userID string) (*ListCredentialsResponse, *httperr.HTTPError) {
+	creds, err := h.storage.ListCredentials(ctx, userID)
+	if err != nil {
+		h.log.Error("failed to list credentials", slog.Any("error", err))
+
+		return nil, httperr.NewHTTPError(http.StatusInternalServerError, err)
+	}
+
+	if creds == nil {
+		return &ListCredentialsResponse{Creds: []*Credential{}}, nil
+	}
+
+	crds := make([]*Credential, 0, len(creds))
+
+	for _, cred := range creds {
+		crds = append(crds, &Credential{
+			ID:        cred.ID(),
+			Metadata:  cred.Metadata(),
+			CreatedAt: cred.CreatedAt(),
+			UpdatedAt: cred.UpdatedAt(),
+		})
+	}
+
+	sort.Slice(crds, func(i, j int) bool {
+		return crds[i].ID < crds[j].ID
+	})
+
+	return &ListCredentialsResponse{Creds: crds}, nil
+}
+
 func (h *Handlers) GetCredential(w http.ResponseWriter, req *http.Request) {
 	userID := req.Header.Get("X-User-Id")
 	if userID == "" {
@@ -193,37 +224,6 @@ func (h *Handlers) processGetCredentialRequest(ctx context.Context, userID, cred
 			},
 		},
 	}, nil
-}
-
-// processListCredentialsRequest processes list credentials request.
-func (h *Handlers) processListCredentialsRequest(ctx context.Context, userID string) (*ListCredentialsResponse, *httperr.HTTPError) {
-	creds, err := h.storage.ListCredentials(ctx, userID)
-	if err != nil {
-		h.log.Error("failed to list credentials", slog.Any("error", err))
-
-		return nil, httperr.NewHTTPError(http.StatusInternalServerError, err)
-	}
-
-	if creds == nil {
-		return &ListCredentialsResponse{Creds: []*Credential{}}, nil
-	}
-
-	crds := make([]*Credential, 0, len(creds))
-
-	for _, cred := range creds {
-		crds = append(crds, &Credential{
-			ID:        cred.ID(),
-			Metadata:  cred.Metadata(),
-			CreatedAt: cred.CreatedAt(),
-			UpdatedAt: cred.UpdatedAt(),
-		})
-	}
-
-	sort.Slice(crds, func(i, j int) bool {
-		return crds[i].ID < crds[j].ID
-	})
-
-	return &ListCredentialsResponse{Creds: crds}, nil
 }
 
 // UpdateCredential handles update credentials request.

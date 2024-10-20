@@ -3,9 +3,15 @@ package files
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
 	"log/slog"
 	"mime/multipart"
 	"net/http"
+	"sort"
+
+	"github.com/go-chi/chi/v5"
 
 	"github.com/andymarkow/gophkeeper/internal/api"
 	"github.com/andymarkow/gophkeeper/internal/httperr"
@@ -50,30 +56,211 @@ func (h *Handlers) CreateFile(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	resourceID := req.FormValue("resource_id")
-	if resourceID == "" {
-		httperr.HandleError(w, ErrResIDEmpty)
+	var payload CreateFileRequest
+	if err := h.readBody(req.Body, &payload); err != nil {
+		httperr.HandleError(w, err)
+
+		return
+	}
+	defer req.Body.Close()
+
+	resp, httpErr := h.processCreateFileRequest(req.Context(), userID, payload.ID, payload.Metadata)
+	if httpErr != nil {
+		httperr.HandleError(w, httpErr)
 
 		return
 	}
 
-	checksum := req.FormValue("checksum")
-	if checksum == "" {
-		httperr.HandleError(w, ErrChecksumEmpty)
+	api.JSONResponse(w, http.StatusCreated, resp)
+}
+
+func (h *Handlers) processCreateFileRequest(ctx context.Context, userID, fileID string, metadata map[string]string,
+) (*CreateFileResponse, *httperr.HTTPError) {
+	f, err := h.filesvc.CreateFile(ctx, userID, fileID, metadata)
+	if err != nil {
+		h.log.Error("failed to create file entry", slog.Any("error", err))
+
+		return nil, httperr.NewHTTPError(http.StatusBadRequest, err)
+	}
+
+	return &CreateFileResponse{
+		&File{
+			ID:        f.ID(),
+			Name:      f.Name(),
+			Checksum:  f.Checksum(),
+			Size:      f.Size(),
+			Metadata:  f.Metadata(),
+			CreatedAt: f.CreatedAt(),
+			UpdatedAt: f.UpdatedAt(),
+		},
+	}, nil
+}
+
+func (h *Handlers) UpdateFile(w http.ResponseWriter, req *http.Request) {
+	userID := req.Header.Get("X-User-Id")
+	if userID == "" {
+		httperr.HandleError(w, httperr.ErrUsrIDHeaderEmpty)
 
 		return
 	}
 
-	var metadata map[string]string
+	fileID := chi.URLParam(req, "fileID")
+	if fileID == "" {
+		httperr.HandleError(w, ErrFileIDEmpty)
 
-	metaStr := req.FormValue("metadata")
-	if metaStr != "" {
-		err := json.Unmarshal([]byte(metaStr), &metadata)
-		if err != nil {
-			httperr.HandleError(w, httperr.NewHTTPError(http.StatusBadRequest, err))
+		return
+	}
 
-			return
+	var payload UpdateFileRequest
+	if err := h.readBody(req.Body, &payload); err != nil {
+		httperr.HandleError(w, err)
+
+		return
+	}
+	defer req.Body.Close()
+
+	resp, httpErr := h.processUpdateFileRequest(req.Context(), userID, fileID, payload.Name, payload.Metadata)
+	if httpErr != nil {
+		httperr.HandleError(w, httpErr)
+
+		return
+	}
+
+	api.JSONResponse(w, http.StatusAccepted, resp)
+}
+
+func (h *Handlers) processUpdateFileRequest(ctx context.Context, userID, fileID, fileName string, metadata map[string]string,
+) (*UpdateFileResponse, *httperr.HTTPError) {
+	f, err := h.filesvc.UpdateFile(ctx, userID, fileID, fileName, metadata)
+	if err != nil {
+		h.log.Error("failed to update file entry", slog.Any("error", err))
+
+		return nil, httperr.NewHTTPError(http.StatusBadRequest, err)
+	}
+
+	return &UpdateFileResponse{
+		&File{
+			ID:        f.ID(),
+			Name:      f.Name(),
+			Checksum:  f.Checksum(),
+			Size:      f.Size(),
+			Metadata:  f.Metadata(),
+			CreatedAt: f.CreatedAt(),
+			UpdatedAt: f.UpdatedAt(),
+		},
+	}, nil
+}
+
+func (h *Handlers) ListFiles(w http.ResponseWriter, req *http.Request) {
+	userID := req.Header.Get("X-User-Id")
+	if userID == "" {
+		httperr.HandleError(w, httperr.ErrUsrIDHeaderEmpty)
+
+		return
+	}
+
+	resp, err := h.processListFilesRequest(req.Context(), userID)
+	if err != nil {
+		httperr.HandleError(w, err)
+
+		return
+	}
+
+	api.JSONResponse(w, http.StatusOK, resp)
+}
+
+func (h *Handlers) processListFilesRequest(ctx context.Context, userID string) (*ListFilesResponse, *httperr.HTTPError) {
+	files, err := h.filesvc.ListFiles(ctx, userID)
+	if err != nil {
+		h.log.Error("failed to list files", slog.Any("error", err))
+
+		return nil, httperr.NewHTTPError(http.StatusBadRequest, err)
+	}
+
+	resp := &ListFilesResponse{
+		Files: make([]*File, 0, len(files)),
+	}
+
+	for _, f := range files {
+		resp.Files = append(resp.Files, &File{
+			ID:        f.ID(),
+			Name:      f.Name(),
+			Checksum:  f.Checksum(),
+			Size:      f.Size(),
+			Metadata:  f.Metadata(),
+			CreatedAt: f.CreatedAt(),
+			UpdatedAt: f.UpdatedAt(),
+		})
+	}
+
+	sort.Slice(resp.Files, func(i, j int) bool {
+		return resp.Files[i].ID < resp.Files[j].ID
+	})
+
+	return resp, nil
+}
+
+func (h *Handlers) GetFile(w http.ResponseWriter, req *http.Request) {
+	userID := req.Header.Get("X-User-Id")
+	if userID == "" {
+		httperr.HandleError(w, httperr.ErrUsrIDHeaderEmpty)
+
+		return
+	}
+
+	fileID := chi.URLParam(req, "fileID")
+	if fileID == "" {
+		httperr.HandleError(w, ErrFileIDEmpty)
+
+		return
+	}
+
+	resp, err := h.processGetFileRequest(req.Context(), userID, fileID)
+	if err != nil {
+		httperr.HandleError(w, err)
+
+		return
+	}
+
+	api.JSONResponse(w, http.StatusOK, resp)
+}
+
+func (h *Handlers) processGetFileRequest(ctx context.Context, userID, fileID string) (*File, *httperr.HTTPError) {
+	f, err := h.filesvc.GetFile(ctx, userID, fileID)
+	if err != nil {
+		if errors.Is(err, filesvc.ErrFileEntryNotFound) {
+			return nil, httperr.NewHTTPError(http.StatusNotFound, err)
 		}
+
+		h.log.Error("failed to get file", slog.Any("error", err))
+
+		return nil, httperr.NewHTTPError(http.StatusBadRequest, err)
+	}
+
+	return &File{
+		ID:        f.ID(),
+		Name:      f.Name(),
+		Checksum:  f.Checksum(),
+		Size:      f.Size(),
+		Metadata:  f.Metadata(),
+		CreatedAt: f.CreatedAt(),
+		UpdatedAt: f.UpdatedAt(),
+	}, nil
+}
+
+func (h *Handlers) UploadFile(w http.ResponseWriter, req *http.Request) {
+	userID := req.Header.Get("X-User-Id")
+	if userID == "" {
+		httperr.HandleError(w, httperr.ErrUsrIDHeaderEmpty)
+
+		return
+	}
+
+	fileID := req.FormValue("file_id")
+	if fileID == "" {
+		httperr.HandleError(w, ErrFileIDEmpty)
+
+		return
 	}
 
 	file, fileHeader, err := req.FormFile("file")
@@ -84,38 +271,35 @@ func (h *Handlers) CreateFile(w http.ResponseWriter, req *http.Request) {
 	}
 	defer file.Close()
 
-	resp, httpErr := h.processCreateFileRequest(req.Context(), userID, resourceID, checksum, metadata, file, fileHeader)
+	resp, httpErr := h.processUploadFileRequest(req.Context(), userID, fileID, file, fileHeader)
 	if httpErr != nil {
 		httperr.HandleError(w, httpErr)
 
 		return
 	}
 
-	api.JSONResponse(w, http.StatusCreated, resp)
+	api.JSONResponse(w, http.StatusOK, resp)
 }
 
-func (h *Handlers) processCreateFileRequest(ctx context.Context, userID, resourceID, checksum string,
-	metadata map[string]string, file multipart.File, fileHeader *multipart.FileHeader,
-) (*CreateFileResponse, *httperr.HTTPError) {
-	f, err := h.filesvc.CreateFile(ctx, userID, resourceID, filesvc.CreateFileRequest{
-		Name:     fileHeader.Filename,
-		Checksum: checksum,
-		Size:     -1, // Must be set explicitly to '-1'.
-		Metadata: metadata,
-		Data:     file,
+func (h *Handlers) processUploadFileRequest(ctx context.Context, userID, fileID string,
+	file multipart.File, fileHeader *multipart.FileHeader,
+) (*UploadFileResponse, *httperr.HTTPError) {
+	f, err := h.filesvc.UploadFile(ctx, userID, fileID, filesvc.UploadFileRequest{
+		Name: fileHeader.Filename,
+		Size: -1, // Must be set explicitly to '-1'.
+		Data: file,
 	})
 	if err != nil {
-		h.log.Error("failed to create file", slog.Any("error", err))
+		h.log.Error("failed to upload file", slog.Any("error", err))
 
 		return nil, httperr.NewHTTPError(http.StatusBadRequest, err)
 	}
 
-	return &CreateFileResponse{
+	return &UploadFileResponse{
 		&File{
 			ID:        f.ID(),
 			Name:      f.Name(),
 			Checksum:  f.Checksum(),
-			Location:  f.Location().String(),
 			Size:      f.Size(),
 			Metadata:  f.Metadata(),
 			CreatedAt: f.CreatedAt(),
@@ -124,19 +308,107 @@ func (h *Handlers) processCreateFileRequest(ctx context.Context, userID, resourc
 	}, nil
 }
 
-// func (h *Handlers) readBody(body io.ReadCloser, v any) *httperr.HTTPError {
-// 	err := json.NewDecoder(body).Decode(v)
-// 	if err != nil {
-// 		if errors.Is(err, io.EOF) {
-// 			h.log.Error("json.NewDecoder.Decode", slog.Any("error", err))
+func (h *Handlers) DownloadFile(w http.ResponseWriter, req *http.Request) {
+	userID := req.Header.Get("X-User-Id")
+	if userID == "" {
+		httperr.HandleError(w, httperr.ErrUsrIDHeaderEmpty)
 
-// 			return httperr.ErrReqPayloadEmpty
-// 		}
+		return
+	}
 
-// 		h.log.Error("json.NewDecoder.Decode", slog.Any("error", err))
+	fileID := chi.URLParam(req, "fileID")
+	if fileID == "" {
+		httperr.HandleError(w, ErrFileIDEmpty)
 
-// 		return httperr.NewHTTPError(http.StatusBadRequest, err)
-// 	}
+		return
+	}
 
-// 	return nil
-// }
+	filename, stream, httpErr := h.processDownloadFileRequest(req.Context(), userID, fileID)
+	if httpErr != nil {
+		httperr.HandleError(w, httpErr)
+
+		return
+	}
+	defer stream.Close()
+
+	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", filename))
+	w.Header().Set("Content-Type", "application/octet-stream")
+	w.WriteHeader(http.StatusOK)
+
+	_, err := io.Copy(w, stream)
+	if err != nil {
+		httperr.HandleError(w, httperr.NewHTTPError(http.StatusInternalServerError, err))
+	}
+}
+
+func (h *Handlers) processDownloadFileRequest(ctx context.Context, userID, fileID string) (string, io.ReadCloser, *httperr.HTTPError) {
+	f, rd, err := h.filesvc.DownloadFile(ctx, userID, fileID)
+	if err != nil {
+		if errors.Is(err, filesvc.ErrFileObjectNotFound) {
+			return "", nil, httperr.NewHTTPError(http.StatusNotFound, err)
+		}
+
+		h.log.Error("failed to download file", slog.Any("error", err))
+
+		return "", nil, httperr.NewHTTPError(http.StatusBadRequest, err)
+	}
+
+	return f.Name(), rd, nil
+}
+
+func (h *Handlers) DeleteFile(w http.ResponseWriter, req *http.Request) {
+	userID := req.Header.Get("X-User-Id")
+	if userID == "" {
+		httperr.HandleError(w, httperr.ErrUsrIDHeaderEmpty)
+
+		return
+	}
+
+	fileID := chi.URLParam(req, "fileID")
+	if fileID == "" {
+		httperr.HandleError(w, ErrFileIDEmpty)
+
+		return
+	}
+
+	err := h.processDeleteFileRequest(req.Context(), userID, fileID)
+	if err != nil {
+		httperr.HandleError(w, err)
+
+		return
+	}
+
+	api.JSONResponse(w, http.StatusNoContent, nil)
+}
+
+func (h *Handlers) processDeleteFileRequest(ctx context.Context, userID, fileID string) *httperr.HTTPError {
+	err := h.filesvc.DeleteFile(ctx, userID, fileID)
+	if err != nil {
+		if errors.Is(err, filesvc.ErrFileEntryNotFound) {
+			return httperr.NewHTTPError(http.StatusNotFound, err)
+		}
+
+		h.log.Error("failed to delete file", slog.Any("error", err))
+
+		return httperr.NewHTTPError(http.StatusBadRequest, err)
+	}
+
+	return nil
+}
+
+func (h *Handlers) readBody(body io.ReadCloser, v any) *httperr.HTTPError {
+	err := json.NewDecoder(body).Decode(v)
+	if err != nil {
+		if errors.Is(err, io.EOF) {
+			h.log.Error("json.NewDecoder.Decode", slog.Any("error", err))
+
+			return httperr.ErrReqPayloadEmpty
+		}
+
+		h.log.Error("json.NewDecoder.Decode", slog.Any("error", err))
+
+		return httperr.NewHTTPError(http.StatusBadRequest, err)
+	}
+
+	return nil
+}

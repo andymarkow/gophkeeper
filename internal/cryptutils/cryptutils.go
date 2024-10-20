@@ -2,12 +2,14 @@
 package cryptutils
 
 import (
-	"bytes"
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"
 	"encoding/base64"
+	"encoding/hex"
 	"fmt"
+	"hash"
+	"hash/crc32"
 	"io"
 
 	"golang.org/x/crypto/scrypt"
@@ -65,41 +67,132 @@ func DecryptString(key []byte, ciphertext string) (string, error) {
 	return string(textBytes), nil
 }
 
-func EncryptStream(passphrase string, rd io.Reader) (io.Reader, error) {
+// generateAESKey generates a random salt and then uses the passphrase to generate an
+// AES key using the scrypt key derivation function. The key is 32 bytes long.
+//
+// The generated salt is also returned, and should be stored securely along
+// with the encrypted data. The salt should not be secret.
+func generateAESKey(passphrase []byte) ([]byte, []byte, error) {
+	// Generate random salt with the size of 16 bytes.
 	salt := make([]byte, 16)
-	_, err := rand.Read(salt)
+	_, err := io.ReadFull(rand.Reader, salt)
 	if err != nil {
-		return nil, fmt.Errorf("rand.Read: %w", err)
+		return nil, nil, fmt.Errorf("failed to generate salt: %w", err)
 	}
 
-	key, err := scrypt.Key([]byte(passphrase), salt, 1<<15, 8, 1, 32)
+	// Generate key based on passphrase and salt.
+	key, err := scrypt.Key(passphrase, salt, 1<<15, 8, 1, 32)
 	if err != nil {
-		return nil, fmt.Errorf("scrypt.Key: %w", err)
+		return nil, nil, fmt.Errorf("scrypt.Key: %w", err)
 	}
 
+	return key, salt, nil
+}
+
+type EncryptedStream struct {
+	salt   []byte
+	iv     []byte
+	stream io.Reader
+}
+
+func (s *EncryptedStream) Salt() []byte {
+	return s.salt
+}
+
+func (s *EncryptedStream) SaltHex() string {
+	return hex.EncodeToString(s.salt)
+}
+
+func (s *EncryptedStream) IV() []byte {
+	return s.iv
+}
+
+func (s *EncryptedStream) IVHex() string {
+	return hex.EncodeToString(s.iv)
+}
+
+func (s *EncryptedStream) Stream() io.Reader {
+	return s.stream
+}
+
+func EncryptStream(passphrase []byte, rd io.Reader) (*EncryptedStream, error) {
+	key, salt, err := generateAESKey(passphrase)
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate AES key: %w", err)
+	}
+
+	// Create cipher block based on the key.
 	block, err := aes.NewCipher(key)
 	if err != nil {
 		return nil, fmt.Errorf("aes.NewCipher: %w", err)
 	}
 
-	// gcm, err := cipher.NewGCM(block)
-	// if err != nil {
-	// 	return nil, fmt.Errorf("cipher.NewGCM: %w", err)
-	// }
-
-	nonce := make([]byte, block.BlockSize())
-	_, err = io.ReadFull(rand.Reader, nonce)
+	// Create Initialization Vector with the same size as the block size.
+	iv := make([]byte, block.BlockSize())
+	_, err = io.ReadFull(rand.Reader, iv)
 	if err != nil {
 		return nil, fmt.Errorf("io.ReadFull: %w", err)
 	}
 
-	stream := cipher.NewCTR(block, nonce)
+	// Create encryptor in CTR mode.
+	stream := cipher.NewCTR(block, iv)
 
 	// Create encrypted stream reader.
 	encryptReader := cipher.StreamReader{
 		S: stream,
-		R: io.MultiReader(bytes.NewReader(salt), bytes.NewReader(nonce), rd),
+		R: rd,
 	}
 
-	return encryptReader, nil
+	return &EncryptedStream{
+		salt:   salt,
+		iv:     iv,
+		stream: encryptReader,
+	}, nil
+}
+
+type readCloser struct {
+	io.Reader
+	io.Closer
+}
+
+func DecryptStream(passphrase, salt, iv []byte, rd io.ReadCloser) (io.ReadCloser, error) {
+	// Generate key from passphrase and salt.
+	key, err := scrypt.Key(passphrase, salt, 1<<15, 8, 1, 32)
+	if err != nil {
+		return nil, fmt.Errorf("scrypt.Key: %w", err)
+	}
+
+	// Create cipher block based on the key.
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		return nil, fmt.Errorf("aes.NewCipher: %w", err)
+	}
+
+	// Create decryptor in CTR mode.
+	stream := cipher.NewCTR(block, iv)
+
+	// Create decrypted stream reader.
+	decryptReader := cipher.StreamReader{
+		S: stream,
+		R: rd,
+	}
+
+	return &readCloser{
+		Reader: decryptReader,
+		Closer: rd,
+	}, nil
+}
+
+// CalcStreamHash calculates the CRC32 hashsum of a given io.Reader.
+func CalcStreamHash(rd io.Reader) (io.Reader, hash.Hash32) {
+	// Create a CRC32 hash table.
+	table := crc32.MakeTable(crc32.Castagnoli)
+
+	// Create a CRC32 hash function using the table.
+	hash := crc32.New(table)
+
+	// Wrap the reader with the hash function writer.
+	teeReader := io.TeeReader(rd, hash)
+
+	return teeReader, hash
 }
