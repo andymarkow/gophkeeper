@@ -13,7 +13,7 @@ var _ Storage = (*InMemory)(nil)
 // InMemory represents in-memory bank cards storage.
 type InMemory struct {
 	// UserID -> SecretName -> Secret.
-	cards map[string]map[string]bankcard.Bankcard
+	secrets map[string]map[string]bankcard.Secret
 
 	mu sync.RWMutex
 }
@@ -21,121 +21,123 @@ type InMemory struct {
 // NewInMemory creates new in-memory bank cards storage.
 func NewInMemory() *InMemory {
 	return &InMemory{
-		cards: make(map[string]map[string]bankcard.Bankcard),
+		secrets: make(map[string]map[string]bankcard.Secret),
 	}
 }
 
-// AddCard adds a new bank card to the storage.
-func (s *InMemory) AddCard(_ context.Context, card *bankcard.Bankcard) error {
+// AddSecret adds a new bank card secret entry to the storage.
+func (s *InMemory) AddSecret(_ context.Context, secret *bankcard.Secret) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	// Check if the user login entry exists in the storage.
-	cards, ok := s.cards[card.UserID()]
+	secrets, ok := s.secrets[secret.UserID()]
 	if !ok {
 		// Check if cards entry is nil.
-		if cards == nil {
+		if secrets == nil {
 			// Initialize cards entry.
-			s.cards[card.UserID()] = make(map[string]bankcard.Bankcard)
+			s.secrets[secret.UserID()] = make(map[string]bankcard.Secret)
 		}
 
 		// UserID does not exist in the storage. Add user login and bank card to the storage.
-		s.cards[card.UserID()][card.ID()] = *card
+		s.secrets[secret.UserID()][secret.Name()] = *secret
 
 		return nil
 	}
 
-	if _, ok := cards[card.ID()]; ok {
+	if _, ok := secrets[secret.Name()]; ok {
 		// Bank card already exists in the storage.
-		return fmt.Errorf("%w: %s", ErrCardAlreadyExists, card.ID())
+		return fmt.Errorf("%w: %s", ErrSecretAlreadyExists, secret.Name())
 	}
 
 	// Add bank card to the storage.
-	s.cards[card.UserID()][card.ID()] = *card
+	s.secrets[secret.UserID()][secret.Name()] = *secret
 
 	return nil
 }
 
-// GetCard returns a bank card from the storage.
-func (s *InMemory) GetCard(_ context.Context, userLogin, cardID string) (*bankcard.Bankcard, error) {
+// GetSecret returns a bank card secret entry from the storage.
+func (s *InMemory) GetSecret(_ context.Context, userID, secretName string) (*bankcard.Secret, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
 	// Check if the user login entry exists in the storage.
-	cards, ok := s.cards[userLogin]
+	secrets, ok := s.secrets[userID]
 	if !ok {
-		return nil, fmt.Errorf("%w for user login %s: %s", ErrCardNotFound, userLogin, cardID)
+		return nil, fmt.Errorf("%w for user login %s: %s", ErrSecretNotFound, userID, secretName)
 	}
 
-	// Check if the bank card entry exists in the storage.
-	if card, ok := cards[cardID]; ok {
+	// Check if the bank card secret entry exists in the storage.
+	if card, ok := secrets[secretName]; ok {
 		crd := card
 
 		return &crd, nil
 	}
 
-	return nil, fmt.Errorf("%w for user login %s: %s", ErrCardNotFound, userLogin, cardID)
+	return nil, fmt.Errorf("%w for user login %s: %s", ErrSecretNotFound, userID, secretName)
 }
 
-// ListCards returns a list of bank card IDs from the storage.
-func (s *InMemory) ListCards(_ context.Context, userLogin string) ([]*bankcard.Bankcard, error) {
+// ListSecrets returns a list of bank card secret entries from the storage.
+func (s *InMemory) ListSecrets(_ context.Context, userID string) ([]*bankcard.Secret, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
 	// Check if the user login entry exists in the storage.
-	cards, ok := s.cards[userLogin]
+	secrets, ok := s.secrets[userID]
 	if !ok {
-		return []*bankcard.Bankcard{}, nil
+		return []*bankcard.Secret{}, nil
 	}
 
-	cardsList := make([]*bankcard.Bankcard, 0, len(cards))
+	secretsList := make([]*bankcard.Secret, 0, len(secrets))
 
-	for _, card := range cards {
+	for _, card := range secrets {
 		crd := card
-		cardsList = append(cardsList, &crd)
+		secretsList = append(secretsList, &crd)
 	}
 
-	return cardsList, nil
+	return secretsList, nil
 }
 
-// UpdateCard updates a bank card in the storage.
-func (s *InMemory) UpdateCard(_ context.Context, card *bankcard.Bankcard) error {
+// UpdateSecret updates a bank card secret entry in the storage.
+func (s *InMemory) UpdateSecret(_ context.Context, secret *bankcard.Secret) (*bankcard.Secret, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	// Check if the user login entry exists in the storage.
-	cards, ok := s.cards[card.UserID()]
+	secrets, ok := s.secrets[secret.UserID()]
 	if !ok {
-		return fmt.Errorf("%w for user login %s: %s", ErrCardNotFound, card.UserID(), card.ID())
+		return nil, fmt.Errorf("%w for user login %s: %s", ErrSecretNotFound, secret.UserID(), secret.Name())
 	}
 
-	if _, ok := cards[card.ID()]; !ok {
-		return fmt.Errorf("%w for user login %s: %s", ErrCardNotFound, card.UserID(), card.ID())
+	if _, ok := secrets[secret.Name()]; !ok {
+		return nil, fmt.Errorf("%w for user login %s: %s", ErrSecretNotFound, secret.UserID(), secret.Name())
 	}
 
-	// Update bank card in the storage.
-	s.cards[card.UserID()][card.ID()] = *card
+	// Update bank card secret entry in the storage.
+	s.secrets[secret.UserID()][secret.Name()] = *secret
 
-	return nil
+	sec := s.secrets[secret.UserID()][secret.Name()]
+
+	return &sec, nil
 }
 
-// DeleteCard deletes a bank card from the storage.
-func (s *InMemory) DeleteCard(_ context.Context, userLogin, cardID string) error {
+// DeleteSecret deletes a bank card secret entry from the storage.
+func (s *InMemory) DeleteSecret(_ context.Context, userID, secretName string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	// Check if the user login entry exists in the storage.
-	cards, ok := s.cards[userLogin]
+	secrets, ok := s.secrets[userID]
 	if !ok {
-		return fmt.Errorf("%w for user login %s: %s", ErrCardNotFound, userLogin, cardID)
+		return fmt.Errorf("%w for user login %s: %s", ErrSecretNotFound, userID, secretName)
 	}
 
-	if _, ok := cards[cardID]; !ok {
-		return fmt.Errorf("%w for user login %s: %s", ErrCardNotFound, userLogin, cardID)
+	if _, ok := secrets[secretName]; !ok {
+		return fmt.Errorf("%w for user login %s: %s", ErrSecretNotFound, userID, secretName)
 	}
 
-	// Delete bank card from the storage.
-	delete(s.cards[userLogin], cardID)
+	// Delete bank card secret entry from the storage.
+	delete(s.secrets[userID], secretName)
 
 	return nil
 }

@@ -6,12 +6,15 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/google/uuid"
+
 	"github.com/andymarkow/gophkeeper/internal/cryptutils"
 )
 
-// Bankcard represents bank card.
-type Bankcard struct {
+// Secret represents bank card secret.
+type Secret struct {
 	id        string
+	name      string
 	userID    string
 	metadata  map[string]string
 	createdAt time.Time
@@ -19,7 +22,7 @@ type Bankcard struct {
 	data      *Data
 }
 
-// Data represents bank card data.
+// Data represents bank card secret data.
 type Data struct {
 	number   string
 	name     string
@@ -73,31 +76,40 @@ func NewEmptyData() *Data {
 	return &Data{}
 }
 
-// CreateBankcard creates a new bank card.
-func CreateBankcard(id, userID string, metadata map[string]string, data *Data) (*Bankcard, error) {
+// CreateSecret creates a new bank card.
+func CreateSecret(name, userID string, metadata map[string]string, data *Data) (*Secret, error) {
 	if data == nil {
-		return nil, fmt.Errorf("data must not be empty")
+		data = NewEmptyData()
 	}
 
-	return NewBankcard(id, userID, metadata, time.Now(), time.Now(), data)
+	return NewSecret(uuid.New().String(), name, userID, metadata, time.Now(), time.Now(), data)
 }
 
-// NewBankcard creates a new bank card.
-func NewBankcard(id, userID string, metadata map[string]string, createdAt, updatedAt time.Time, data *Data) (*Bankcard, error) {
+// NewSecret creates a new bank card.
+func NewSecret(id, name, userID string, metadata map[string]string, createdAt, updatedAt time.Time, data *Data) (*Secret, error) {
 	if id == "" {
 		return nil, fmt.Errorf("id must not be empty")
+	}
+
+	if name == "" {
+		return nil, fmt.Errorf("name must not be empty")
 	}
 
 	if userID == "" {
 		return nil, fmt.Errorf("user id must not be empty")
 	}
 
+	if metadata == nil {
+		metadata = make(map[string]string)
+	}
+
 	if data == nil {
 		return nil, fmt.Errorf("data must not be empty")
 	}
 
-	return &Bankcard{
+	return &Secret{
 		id:        id,
+		name:      name,
 		userID:    userID,
 		metadata:  metadata,
 		createdAt: createdAt,
@@ -106,47 +118,59 @@ func NewBankcard(id, userID string, metadata map[string]string, createdAt, updat
 	}, nil
 }
 
-// ID returns the id of the bank card.
-func (c *Bankcard) ID() string {
-	return c.id
+// ID returns the id of the bank card secret.
+func (s *Secret) ID() string {
+	return s.id
 }
 
-// UserID returns the user login of the bank card.
-func (c *Bankcard) UserID() string {
-	return c.userID
+// Name returns the name of the bank card secret.
+func (s *Secret) Name() string {
+	return s.name
 }
 
-// Metadata returns the metadata of the bank card.
-func (c *Bankcard) Metadata() map[string]string {
-	return c.metadata
+// UserID returns the user login of the bank card secret.
+func (s *Secret) UserID() string {
+	return s.userID
 }
 
-// CreatedAt returns the create at of the bank card.
-func (c *Bankcard) CreatedAt() time.Time {
-	return c.createdAt
+// Metadata returns the metadata of the bank card secret.
+func (s *Secret) Metadata() map[string]string {
+	return s.metadata
 }
 
-// UpdatedAt returns the update at of the bank card.
-func (c *Bankcard) UpdatedAt() time.Time {
-	return c.updatedAt
+// AddMetadata adds metadata to the bank card secret.
+func (s *Secret) AddMetadata(metadata map[string]string) {
+	for k, v := range metadata {
+		s.metadata[k] = v
+	}
 }
 
-// SetData sets the data of the bank card.
-func (c *Bankcard) SetData(data *Data) {
-	c.data = data
+// CreatedAt returns the create at of the bank card secret.
+func (s *Secret) CreatedAt() time.Time {
+	return s.createdAt
 }
 
-// Data returns the data of the bank card.
-func (c *Bankcard) Data() *Data {
-	return c.data
+// UpdatedAt returns the update at of the bank card secret.
+func (s *Secret) UpdatedAt() time.Time {
+	return s.updatedAt
 }
 
-// Number returns the number of the bank card.
+// Data returns the data of the bank card secret.
+func (s *Secret) Data() *Data {
+	return s.data
+}
+
+// SetData sets the data of the bank card secret.
+func (s *Secret) SetData(data *Data) {
+	s.data = data
+}
+
+// Number returns the number of the bank card secret.
 func (d *Data) Number() string {
 	return d.number
 }
 
-// Name returns the name of the bank card.
+// Name returns the name of the bank card secret.
 func (d *Data) Name() string {
 	return d.name
 }

@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net/http"
 	"sort"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 
@@ -49,8 +50,8 @@ func WithLogger(log *slog.Logger) Option {
 	}
 }
 
-// CreateCard handles create card request.
-func (h *Handlers) CreateCard(w http.ResponseWriter, req *http.Request) {
+// CreateSecret handles create bank card secret request.
+func (h *Handlers) CreateSecret(w http.ResponseWriter, req *http.Request) {
 	userID := req.Header.Get("X-User-Id")
 	if userID == "" {
 		httperr.HandleError(w, httperr.ErrUsrIDHeaderEmpty)
@@ -58,65 +59,77 @@ func (h *Handlers) CreateCard(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	var payload CreateCardRequest
+	var payload CreateSecretRequest
 
-	if err := h.readBody(req.Body, &payload); err != nil {
-		httperr.HandleError(w, err)
+	if httpErr := h.readBody(req.Body, &payload); httpErr != nil {
+		httperr.HandleError(w, httpErr)
 
 		return
 	}
-
 	defer req.Body.Close()
 
-	if err := h.processCreateCardRequest(req.Context(), userID, payload); err != nil {
+	resp, err := h.processCreateSecretRequest(req.Context(), userID, payload)
+	if err != nil {
 		httperr.HandleError(w, err)
 
 		return
 	}
 
-	api.JSONResponse(w, http.StatusCreated, &CreateCardResponse{Message: "ok"})
+	api.JSONResponse(w, http.StatusCreated, resp)
 }
 
-// processCreateCardRequest processes create card request.
-func (h *Handlers) processCreateCardRequest(ctx context.Context, userID string, payload CreateCardRequest) *httperr.HTTPError {
+// processCreateSecretRequest processes create bank card secret request.
+func (h *Handlers) processCreateSecretRequest(ctx context.Context, userID string, payload CreateSecretRequest) (*Secret, *httperr.HTTPError) {
 	data, err := bankcard.CreateData(payload.Data.Number, payload.Data.Name, payload.Data.CVV, payload.Data.ExpireAt)
 	if err != nil {
-		h.log.Error("failed to create bank card data", slog.Any("error", err))
+		h.log.Error("failed to create bank card secret data", slog.Any("error", err))
 
-		return httperr.NewHTTPError(http.StatusBadRequest, err)
+		return nil, httperr.NewHTTPError(http.StatusBadRequest, err)
 	}
 
 	encData, err := data.Encrypt(h.cryptoKey)
 	if err != nil {
-		h.log.Error("failed to encrypt bank card data", slog.Any("error", err))
+		h.log.Error("failed to encrypt bank card secret data", slog.Any("error", err))
 
-		return httperr.NewHTTPError(http.StatusInternalServerError, err)
+		return nil, httperr.NewHTTPError(http.StatusInternalServerError, err)
 	}
 
-	card, err := bankcard.CreateBankcard(payload.ID, userID, payload.Metadata, encData)
+	secret, err := bankcard.CreateSecret(payload.Name, userID, payload.Metadata, encData)
 	if err != nil {
-		h.log.Error("failed to create bank card", slog.Any("error", err))
+		h.log.Error("failed to create bank card secret", slog.Any("error", err))
 
-		return httperr.NewHTTPError(http.StatusBadRequest, err)
+		return nil, httperr.NewHTTPError(http.StatusBadRequest, err)
 	}
 
-	if err := h.storage.AddCard(ctx, card); err != nil {
-		if errors.Is(err, cardrepo.ErrCardAlreadyExists) {
-			h.log.Error("failed to add bank card to storage", slog.Any("error", err))
+	if err := h.storage.AddSecret(ctx, secret); err != nil {
+		if errors.Is(err, cardrepo.ErrSecretAlreadyExists) {
+			h.log.Error("failed to add bank card secret to storage", slog.Any("error", err))
 
-			return httperr.NewHTTPError(http.StatusConflict, err)
+			return nil, httperr.NewHTTPError(http.StatusConflict, err)
 		}
 
-		h.log.Error("failed to add bank card to storage", slog.Any("error", err))
+		h.log.Error("failed to add bank card secret to storage", slog.Any("error", err))
 
-		return httperr.NewHTTPError(http.StatusInternalServerError, err)
+		return nil, httperr.NewHTTPError(http.StatusInternalServerError, err)
 	}
 
-	return nil
+	return &Secret{
+		ID:        secret.ID(),
+		Name:      secret.Name(),
+		Metadata:  secret.Metadata(),
+		CreatedAt: secret.CreatedAt(),
+		UpdatedAt: secret.UpdatedAt(),
+		Data: &Data{
+			Number:   data.Number(),
+			Name:     data.Name(),
+			ExpireAt: data.ExpireAt(),
+			CVV:      data.CVV(),
+		},
+	}, nil
 }
 
-// GetCard handles get card request.
-func (h *Handlers) GetCard(w http.ResponseWriter, req *http.Request) {
+// GetSecret handles get bank card secret request.
+func (h *Handlers) GetSecret(w http.ResponseWriter, req *http.Request) {
 	userID := req.Header.Get("X-User-Id")
 	if userID == "" {
 		httperr.HandleError(w, httperr.ErrUsrIDHeaderEmpty)
@@ -124,14 +137,14 @@ func (h *Handlers) GetCard(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	cardID := chi.URLParam(req, "cardID")
-	if cardID == "" {
-		httperr.HandleError(w, ErrCardIDEmpty)
+	secretName := chi.URLParam(req, "secretName")
+	if secretName == "" {
+		httperr.HandleError(w, ErrSecretNameEmpty)
 
 		return
 	}
 
-	resp, err := h.processGetCardRequest(req.Context(), userID, cardID)
+	resp, err := h.processGetSecretRequest(req.Context(), userID, secretName)
 	if err != nil {
 		httperr.HandleError(w, err)
 
@@ -141,47 +154,45 @@ func (h *Handlers) GetCard(w http.ResponseWriter, req *http.Request) {
 	api.JSONResponse(w, http.StatusOK, resp)
 }
 
-// processGetCardRequest processes get card request.
-func (h *Handlers) processGetCardRequest(ctx context.Context, userID, cardID string) (*GetCardResponse, *httperr.HTTPError) {
-	card, err := h.storage.GetCard(ctx, userID, cardID)
+// processGetSecretRequest processes get bank card secret request.
+func (h *Handlers) processGetSecretRequest(ctx context.Context, userID, secretName string) (*Secret, *httperr.HTTPError) {
+	secret, err := h.storage.GetSecret(ctx, userID, secretName)
 	if err != nil {
-		if errors.Is(err, cardrepo.ErrCardNotFound) {
+		if errors.Is(err, cardrepo.ErrSecretNotFound) {
 			return nil, httperr.NewHTTPError(http.StatusNotFound, err)
 		}
 
-		h.log.Error("failed to get bank card from storage", slog.Any("error", err))
+		h.log.Error("failed to get bank card secret entry from storage", slog.Any("error", err))
 
 		return nil, httperr.NewHTTPError(http.StatusInternalServerError, err)
 	}
 
-	decData, err := card.Data().Decrypt(h.cryptoKey)
+	decData, err := secret.Data().Decrypt(h.cryptoKey)
 	if err != nil {
-		h.log.Error("failed to decrypt bank card data", slog.Any("error", err))
+		h.log.Error("failed to decrypt bank card secret data", slog.Any("error", err))
 
 		return nil, httperr.NewHTTPError(http.StatusInternalServerError, err)
 	}
 
 	// Set decrypted data.
-	card.SetData(decData)
+	secret.SetData(decData)
 
-	return &GetCardResponse{
-		BankCard: BankCard{
-			ID:        card.ID(),
-			Metadata:  card.Metadata(),
-			CreatedAt: card.CreatedAt(),
-			UpdatedAt: card.UpdatedAt(),
-			Data: &Data{
-				Number:   card.Data().Number(),
-				Name:     card.Data().Name(),
-				CVV:      card.Data().CVV(),
-				ExpireAt: card.Data().ExpireAt(),
-			},
+	return &Secret{
+		ID:        secret.ID(),
+		Metadata:  secret.Metadata(),
+		CreatedAt: secret.CreatedAt(),
+		UpdatedAt: secret.UpdatedAt(),
+		Data: &Data{
+			Number:   secret.Data().Number(),
+			Name:     secret.Data().Name(),
+			CVV:      secret.Data().CVV(),
+			ExpireAt: secret.Data().ExpireAt(),
 		},
 	}, nil
 }
 
-// ListCards handles list cards request.
-func (h *Handlers) ListCards(w http.ResponseWriter, req *http.Request) {
+// ListSecrets handles list bank card secrets request.
+func (h *Handlers) ListSecrets(w http.ResponseWriter, req *http.Request) {
 	userID := req.Header.Get("X-User-Id")
 	if userID == "" {
 		httperr.HandleError(w, httperr.ErrUsrIDHeaderEmpty)
@@ -189,7 +200,7 @@ func (h *Handlers) ListCards(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	resp, err := h.processListCardsRequest(req.Context(), userID)
+	resp, err := h.processListSecretsRequest(req.Context(), userID)
 	if err != nil {
 		httperr.HandleError(w, err)
 
@@ -199,39 +210,40 @@ func (h *Handlers) ListCards(w http.ResponseWriter, req *http.Request) {
 	api.JSONResponse(w, http.StatusOK, resp)
 }
 
-// processListCardsRequest processes list cards request.
-func (h *Handlers) processListCardsRequest(ctx context.Context, userID string) (*ListCardsResponse, *httperr.HTTPError) {
-	cards, err := h.storage.ListCards(ctx, userID)
+// processListSecretsRequest processes list cards request.
+func (h *Handlers) processListSecretsRequest(ctx context.Context, userID string) (*ListSecretsResponse, *httperr.HTTPError) {
+	secrets, err := h.storage.ListSecrets(ctx, userID)
 	if err != nil {
-		h.log.Error("failed to list bank cards from storage", slog.Any("error", err))
+		h.log.Error("failed to list bank card secret entries from the storage", slog.Any("error", err))
 
 		return nil, httperr.NewHTTPError(http.StatusInternalServerError, err)
 	}
 
-	if cards == nil {
-		return &ListCardsResponse{Cards: []*BankCard{}}, nil
+	if secrets == nil {
+		return &ListSecretsResponse{Secrets: []*Secret{}}, nil
 	}
 
-	crds := make([]*BankCard, 0, len(cards))
+	secretsList := make([]*Secret, 0, len(secrets))
 
-	for _, card := range cards {
-		crds = append(crds, &BankCard{
-			ID:        card.ID(),
-			Metadata:  card.Metadata(),
-			CreatedAt: card.CreatedAt(),
-			UpdatedAt: card.UpdatedAt(),
+	for _, secret := range secrets {
+		secretsList = append(secretsList, &Secret{
+			ID:        secret.ID(),
+			Name:      secret.Name(),
+			Metadata:  secret.Metadata(),
+			CreatedAt: secret.CreatedAt(),
+			UpdatedAt: secret.UpdatedAt(),
 		})
 	}
 
-	sort.Slice(crds, func(i, j int) bool {
-		return crds[i].ID < crds[j].ID
+	sort.Slice(secretsList, func(i, j int) bool {
+		return secretsList[i].ID < secretsList[j].ID
 	})
 
-	return &ListCardsResponse{Cards: crds}, nil
+	return &ListSecretsResponse{Secrets: secretsList}, nil
 }
 
-// UpdateCard handles update card request.
-func (h *Handlers) UpdateCard(w http.ResponseWriter, req *http.Request) {
+// UpdateSecret handles update bank card secret request.
+func (h *Handlers) UpdateSecret(w http.ResponseWriter, req *http.Request) {
 	userID := req.Header.Get("X-User-Id")
 	if userID == "" {
 		httperr.HandleError(w, httperr.ErrUsrIDHeaderEmpty)
@@ -239,14 +251,14 @@ func (h *Handlers) UpdateCard(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	cardID := chi.URLParam(req, "cardID")
-	if cardID == "" {
-		httperr.HandleError(w, ErrCardIDEmpty)
+	secretName := chi.URLParam(req, "secretName")
+	if secretName == "" {
+		httperr.HandleError(w, ErrSecretNameEmpty)
 
 		return
 	}
 
-	var payload UpdateCardRequest
+	var payload UpdateSecretRequest
 
 	if err := h.readBody(req.Body, &payload); err != nil {
 		httperr.HandleError(w, err)
@@ -256,58 +268,86 @@ func (h *Handlers) UpdateCard(w http.ResponseWriter, req *http.Request) {
 
 	defer req.Body.Close()
 
-	err := h.processUpdateCardRequest(req.Context(), userID, cardID, &payload)
+	resp, err := h.processUpdateSecretRequest(req.Context(), userID, secretName, &payload)
 	if err != nil {
 		httperr.HandleError(w, err)
 
 		return
 	}
 
-	api.JSONResponse(w, http.StatusNoContent, nil)
+	api.JSONResponse(w, http.StatusAccepted, resp)
 }
 
-// processUpdateCardRequest processes update card request.
-func (h *Handlers) processUpdateCardRequest(ctx context.Context, userID, cardID string, payload *UpdateCardRequest) *httperr.HTTPError {
-	// Read bank card data from the payload.
-	data, err := bankcard.NewData(payload.Data.Number, payload.Data.Name, payload.Data.CVV, payload.Data.ExpireAt)
+// processUpdateSecretRequest processes update bank card secret request.
+func (h *Handlers) processUpdateSecretRequest(ctx context.Context, userID, secretName string, payload *UpdateSecretRequest) (*Secret, *httperr.HTTPError) {
+	currSecret, err := h.storage.GetSecret(ctx, userID, secretName)
 	if err != nil {
-		h.log.Error("failed to read bank card data", slog.Any("error", err))
+		if errors.Is(err, cardrepo.ErrSecretNotFound) {
+			h.log.Error("failed to get bank card secret entry from storage", slog.Any("error", err))
 
-		return httperr.NewHTTPError(http.StatusBadRequest, err)
+			return nil, httperr.NewHTTPError(http.StatusNotFound, err)
+		}
+
+		h.log.Error("failed to get bank card secret entry from storage", slog.Any("error", err))
+
+		return nil, httperr.NewHTTPError(http.StatusInternalServerError, err)
+	}
+
+	// Read bank card data from the payload.
+	data, err := bankcard.CreateData(payload.Data.Number, payload.Data.Name, payload.Data.CVV, payload.Data.ExpireAt)
+	if err != nil {
+		h.log.Error("failed to create bank card secret data", slog.Any("error", err))
+
+		return nil, httperr.NewHTTPError(http.StatusBadRequest, err)
 	}
 
 	// Encrypt bank card data from the payload.
 	encData, err := data.Encrypt(h.cryptoKey)
 	if err != nil {
-		h.log.Error("failed to encrypt bank card data", slog.Any("error", err))
+		h.log.Error("failed to encrypt bank card secret data", slog.Any("error", err))
 
-		return httperr.NewHTTPError(http.StatusInternalServerError, err)
+		return nil, httperr.NewHTTPError(http.StatusInternalServerError, err)
 	}
 
-	card, err := bankcard.CreateBankcard(cardID, userID, payload.Metadata, encData)
+	currSecret.AddMetadata(payload.Metadata)
+
+	secret, err := bankcard.NewSecret(currSecret.ID(), secretName, userID, currSecret.Metadata(), currSecret.CreatedAt(), time.Now(), encData)
 	if err != nil {
-		h.log.Error("failed to create bank card", slog.Any("error", err))
+		h.log.Error("failed to create bank card secret", slog.Any("error", err))
 
-		return httperr.NewHTTPError(http.StatusBadRequest, err)
+		return nil, httperr.NewHTTPError(http.StatusBadRequest, err)
 	}
 
-	if err := h.storage.UpdateCard(ctx, card); err != nil {
-		if errors.Is(err, cardrepo.ErrCardNotFound) {
-			h.log.Error("failed to get bank card from storage", slog.Any("error", err))
+	secr, err := h.storage.UpdateSecret(ctx, secret)
+	if err != nil {
+		if errors.Is(err, cardrepo.ErrSecretNotFound) {
+			h.log.Error("failed to update bank card secret entry in storage", slog.Any("error", err))
 
-			return httperr.NewHTTPError(http.StatusNotFound, err)
+			return nil, httperr.NewHTTPError(http.StatusNotFound, err)
 		}
 
-		h.log.Error("failed to update bank card in storage", slog.Any("error", err))
+		h.log.Error("failed to update bank card entry in storage", slog.Any("error", err))
 
-		return httperr.NewHTTPError(http.StatusInternalServerError, err)
+		return nil, httperr.NewHTTPError(http.StatusInternalServerError, err)
 	}
 
-	return nil
+	return &Secret{
+		ID:        secr.ID(),
+		Name:      secr.Name(),
+		Metadata:  secr.Metadata(),
+		CreatedAt: secr.CreatedAt(),
+		UpdatedAt: secr.UpdatedAt(),
+		Data: &Data{
+			Name:     data.Name(),
+			Number:   data.Number(),
+			CVV:      data.CVV(),
+			ExpireAt: data.ExpireAt(),
+		},
+	}, nil
 }
 
-// DeleteCard handles delete card request.
-func (h *Handlers) DeleteCard(w http.ResponseWriter, req *http.Request) {
+// DeleteSecret handles delete bank card secret request.
+func (h *Handlers) DeleteSecret(w http.ResponseWriter, req *http.Request) {
 	userID := req.Header.Get("X-User-Id")
 	if userID == "" {
 		httperr.HandleError(w, httperr.ErrUsrIDHeaderEmpty)
@@ -315,14 +355,14 @@ func (h *Handlers) DeleteCard(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	cardID := chi.URLParam(req, "cardID")
-	if cardID == "" {
-		httperr.HandleError(w, ErrCardIDEmpty)
+	secretName := chi.URLParam(req, "secretName")
+	if secretName == "" {
+		httperr.HandleError(w, ErrSecretNameEmpty)
 
 		return
 	}
 
-	err := h.processDeleteCardRequest(req.Context(), userID, cardID)
+	err := h.processDeleteSecretRequest(req.Context(), userID, secretName)
 	if err != nil {
 		httperr.HandleError(w, err)
 
@@ -332,15 +372,15 @@ func (h *Handlers) DeleteCard(w http.ResponseWriter, req *http.Request) {
 	api.JSONResponse(w, http.StatusNoContent, nil)
 }
 
-// processDeleteCardRequest processes delete card request.
-func (h *Handlers) processDeleteCardRequest(ctx context.Context, userID, cardID string) *httperr.HTTPError {
-	err := h.storage.DeleteCard(ctx, userID, cardID)
+// processDeleteSecretRequest processes delete card request.
+func (h *Handlers) processDeleteSecretRequest(ctx context.Context, userID, secretName string) *httperr.HTTPError {
+	err := h.storage.DeleteSecret(ctx, userID, secretName)
 	if err != nil {
-		if errors.Is(err, cardrepo.ErrCardNotFound) {
+		if errors.Is(err, cardrepo.ErrSecretNotFound) {
 			return httperr.NewHTTPError(http.StatusNotFound, err)
 		}
 
-		h.log.Error("failed to delete bank card from storage", slog.Any("error", err))
+		h.log.Error("failed to delete bank card secret entry from storage", slog.Any("error", err))
 
 		return httperr.NewHTTPError(http.StatusInternalServerError, err)
 	}

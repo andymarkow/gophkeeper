@@ -8,5 +8,5 @@ import (
 )
 
 var (
-	ErrCardIDEmpty = httperr.NewHTTPError(http.StatusBadRequest, errors.New("card ID is empty"))
+	ErrSecretNameEmpty = httperr.NewHTTPError(http.StatusBadRequest, errors.New("bank card secret name is empty"))
 )

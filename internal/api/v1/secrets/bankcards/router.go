@@ -25,11 +25,11 @@ func NewRouter(repo cardrepo.Storage, cryptoKey []byte, opts *Options) chi.Route
 	r := chi.NewRouter()
 
 	return r.Group(func(r chi.Router) {
-		r.Post("/", h.CreateCard)
-		r.Get("/", h.ListCards)
-		r.Get("/{cardID}", h.GetCard)
-		r.Put("/{cardID}", h.UpdateCard)
-		r.Delete("/{cardID}", h.DeleteCard)
+		r.Post("/", h.CreateSecret)
+		r.Get("/", h.ListSecrets)
+		r.Get("/{secretName}", h.GetSecret)
+		r.Put("/{secretName}", h.UpdateSecret)
+		r.Delete("/{secretName}", h.DeleteSecret)
 	})
 }
 

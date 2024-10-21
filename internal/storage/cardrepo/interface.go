@@ -8,9 +8,9 @@ import (
 )
 
 type Storage interface {
-	AddCard(ctx context.Context, card *bankcard.Bankcard) error
-	GetCard(ctx context.Context, userLogin string, cardID string) (*bankcard.Bankcard, error)
-	ListCards(ctx context.Context, userLogin string) ([]*bankcard.Bankcard, error)
-	UpdateCard(ctx context.Context, card *bankcard.Bankcard) error
-	DeleteCard(ctx context.Context, userLogin string, cardID string) error
+	AddSecret(ctx context.Context, secret *bankcard.Secret) error
+	GetSecret(ctx context.Context, userID string, secretID string) (*bankcard.Secret, error)
+	ListSecrets(ctx context.Context, userID string) ([]*bankcard.Secret, error)
+	UpdateSecret(ctx context.Context, secret *bankcard.Secret) (*bankcard.Secret, error)
+	DeleteSecret(ctx context.Context, userID string, secretID string) error
 }

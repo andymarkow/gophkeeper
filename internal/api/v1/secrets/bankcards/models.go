@@ -3,9 +3,12 @@ package bankcards
 
 import "time"
 
-type BankCard struct {
+type Secret struct {
 	// ID represents bank card ID.
 	ID string `json:"id"`
+
+	// Name represents bank card name.
+	Name string `json:"name"`
 
 	// Metadata represents bank card metadata.
 	Metadata map[string]string `json:"metadata,omitempty"`
@@ -35,28 +38,17 @@ type Data struct {
 	ExpireAt string `json:"expire_at"`
 }
 
-// CreateCardRequest represents create bank card request.
-type CreateCardRequest struct {
-	*BankCard
+// CreateSecretRequest represents create bank card secret request.
+type CreateSecretRequest struct {
+	Secret
 }
 
-// CreateCardResponse represents create bank card response.
-type CreateCardResponse struct {
-	// Message represents response message.
-	Message string `json:"message"`
+// ListSecretsResponse represents list bank card secret entries response.
+type ListSecretsResponse struct {
+	Secrets []*Secret `json:"secrets"`
 }
 
-// GetCardResponse represents get bank card response.
-type GetCardResponse struct {
-	BankCard
-}
-
-// ListCardsResponse represents list bank cards response.
-type ListCardsResponse struct {
-	Cards []*BankCard `json:"cards"`
-}
-
-// UpdateCardRequest represents update bank card request.
-type UpdateCardRequest struct {
-	*BankCard
+// UpdateSecretRequest represents update bank card secret request.
+type UpdateSecretRequest struct {
+	Secret
 }
