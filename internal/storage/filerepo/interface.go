@@ -4,16 +4,14 @@ package filerepo
 import (
 	"context"
 
-	"github.com/andymarkow/gophkeeper/internal/domain/vault/fileobj"
+	"github.com/andymarkow/gophkeeper/internal/domain/vault/file"
 )
-
-var _ Storage = (*InMemory)(nil)
 
 // Storage represents files storage interface.
 type Storage interface {
-	AddFile(ctx context.Context, file *fileobj.File) (*fileobj.File, error)
-	GetFile(ctx context.Context, userLogin, fileID string) (*fileobj.File, error)
-	ListFiles(ctx context.Context, userLogin string) ([]*fileobj.File, error)
-	UpdateFile(ctx context.Context, file *fileobj.File) (*fileobj.File, error)
-	DeleteFile(ctx context.Context, userLogin string, fileID string) error
+	AddSecret(ctx context.Context, secret *file.Secret) (*file.Secret, error)
+	GetSecret(ctx context.Context, userID, secretName string) (*file.Secret, error)
+	ListSecrets(ctx context.Context, userID string) ([]*file.Secret, error)
+	UpdateSecret(ctx context.Context, secret *file.Secret) (*file.Secret, error)
+	DeleteSecret(ctx context.Context, userID string, secretName string) error
 }

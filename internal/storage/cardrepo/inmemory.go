@@ -12,8 +12,8 @@ var _ Storage = (*InMemory)(nil)
 
 // InMemory represents in-memory bank cards storage.
 type InMemory struct {
-	// UserID -> CardNumber -> BankCard
-	cards map[string]map[string]bankcard.BankCard
+	// UserID -> SecretName -> Secret.
+	cards map[string]map[string]bankcard.Bankcard
 
 	mu sync.RWMutex
 }
@@ -21,12 +21,12 @@ type InMemory struct {
 // NewInMemory creates new in-memory bank cards storage.
 func NewInMemory() *InMemory {
 	return &InMemory{
-		cards: make(map[string]map[string]bankcard.BankCard),
+		cards: make(map[string]map[string]bankcard.Bankcard),
 	}
 }
 
 // AddCard adds a new bank card to the storage.
-func (s *InMemory) AddCard(_ context.Context, card *bankcard.BankCard) error {
+func (s *InMemory) AddCard(_ context.Context, card *bankcard.Bankcard) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -36,7 +36,7 @@ func (s *InMemory) AddCard(_ context.Context, card *bankcard.BankCard) error {
 		// Check if cards entry is nil.
 		if cards == nil {
 			// Initialize cards entry.
-			s.cards[card.UserID()] = make(map[string]bankcard.BankCard)
+			s.cards[card.UserID()] = make(map[string]bankcard.Bankcard)
 		}
 
 		// UserID does not exist in the storage. Add user login and bank card to the storage.
@@ -57,7 +57,7 @@ func (s *InMemory) AddCard(_ context.Context, card *bankcard.BankCard) error {
 }
 
 // GetCard returns a bank card from the storage.
-func (s *InMemory) GetCard(_ context.Context, userLogin, cardID string) (*bankcard.BankCard, error) {
+func (s *InMemory) GetCard(_ context.Context, userLogin, cardID string) (*bankcard.Bankcard, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -78,17 +78,17 @@ func (s *InMemory) GetCard(_ context.Context, userLogin, cardID string) (*bankca
 }
 
 // ListCards returns a list of bank card IDs from the storage.
-func (s *InMemory) ListCards(_ context.Context, userLogin string) ([]*bankcard.BankCard, error) {
+func (s *InMemory) ListCards(_ context.Context, userLogin string) ([]*bankcard.Bankcard, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
 	// Check if the user login entry exists in the storage.
 	cards, ok := s.cards[userLogin]
 	if !ok {
-		return []*bankcard.BankCard{}, nil
+		return []*bankcard.Bankcard{}, nil
 	}
 
-	cardsList := make([]*bankcard.BankCard, 0, len(cards))
+	cardsList := make([]*bankcard.Bankcard, 0, len(cards))
 
 	for _, card := range cards {
 		crd := card
@@ -99,7 +99,7 @@ func (s *InMemory) ListCards(_ context.Context, userLogin string) ([]*bankcard.B
 }
 
 // UpdateCard updates a bank card in the storage.
-func (s *InMemory) UpdateCard(_ context.Context, card *bankcard.BankCard) error {
+func (s *InMemory) UpdateCard(_ context.Context, card *bankcard.Bankcard) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 

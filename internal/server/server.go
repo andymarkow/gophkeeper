@@ -16,11 +16,13 @@ import (
 	"github.com/andymarkow/gophkeeper/internal/server/httpserver"
 	"github.com/andymarkow/gophkeeper/internal/server/router"
 	"github.com/andymarkow/gophkeeper/internal/services/filesvc"
+	"github.com/andymarkow/gophkeeper/internal/services/textsvc"
 	"github.com/andymarkow/gophkeeper/internal/slogger"
 	"github.com/andymarkow/gophkeeper/internal/storage/cardrepo"
 	"github.com/andymarkow/gophkeeper/internal/storage/credrepo"
 	"github.com/andymarkow/gophkeeper/internal/storage/filerepo"
 	"github.com/andymarkow/gophkeeper/internal/storage/objrepo"
+	"github.com/andymarkow/gophkeeper/internal/storage/textrepo"
 	"github.com/andymarkow/gophkeeper/internal/storage/userrepo"
 )
 
@@ -55,6 +57,14 @@ func NewServer() (*Server, error) {
 		return nil, fmt.Errorf("objStorage.InitBucket: %w", err)
 	}
 
+	textSvc := textsvc.NewSecretService(
+		textrepo.NewInMemory(),
+		objStorage,
+		textsvc.WithLogger(logger),
+		textsvc.WithCryptoKey([]byte(cfg.CryptoKey)),
+		textsvc.WithObjectBasePath("texts"),
+	)
+
 	fileSvc := filesvc.NewFileService(
 		filerepo.NewInMemory(),
 		objStorage,
@@ -67,6 +77,7 @@ func NewServer() (*Server, error) {
 		userrepo.NewInMemory(),
 		cardrepo.NewInMemory(),
 		credrepo.NewInMemory(),
+		textSvc,
 		fileSvc,
 		router.WithJWTSecret([]byte(cfg.JWTSecret)),
 		router.WithCryptoKey([]byte(cfg.CryptoKey)),
@@ -92,7 +103,7 @@ func (s *Server) Run() error {
 
 	// Graceful shutdown handler.
 	quit := make(chan os.Signal, 1)
-	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGQUIT, syscall.SIGTERM)
 
 	select {
 	case <-quit:

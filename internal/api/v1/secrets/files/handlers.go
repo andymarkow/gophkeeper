@@ -18,7 +18,7 @@ import (
 	"github.com/andymarkow/gophkeeper/internal/services/filesvc"
 )
 
-// Handlers represents bankcards API handlers.
+// Handlers represents files API handlers.
 type Handlers struct {
 	log     *slog.Logger
 	filesvc filesvc.Service
@@ -48,7 +48,8 @@ func WithHandlersLogger(log *slog.Logger) HandlersOpt {
 	}
 }
 
-func (h *Handlers) CreateFile(w http.ResponseWriter, req *http.Request) {
+// CreateSecret handles create file request.
+func (h *Handlers) CreateSecret(w http.ResponseWriter, req *http.Request) {
 	userID := req.Header.Get("X-User-Id")
 	if userID == "" {
 		httperr.HandleError(w, httperr.ErrUsrIDHeaderEmpty)
@@ -56,7 +57,7 @@ func (h *Handlers) CreateFile(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	var payload CreateFileRequest
+	var payload CreateSecretRequest
 	if err := h.readBody(req.Body, &payload); err != nil {
 		httperr.HandleError(w, err)
 
@@ -64,7 +65,7 @@ func (h *Handlers) CreateFile(w http.ResponseWriter, req *http.Request) {
 	}
 	defer req.Body.Close()
 
-	resp, httpErr := h.processCreateFileRequest(req.Context(), userID, payload.ID, payload.Metadata)
+	resp, httpErr := h.processCreateSecretRequest(req.Context(), userID, payload.Name, payload.Metadata)
 	if httpErr != nil {
 		httperr.HandleError(w, httpErr)
 
@@ -74,29 +75,38 @@ func (h *Handlers) CreateFile(w http.ResponseWriter, req *http.Request) {
 	api.JSONResponse(w, http.StatusCreated, resp)
 }
 
-func (h *Handlers) processCreateFileRequest(ctx context.Context, userID, fileID string, metadata map[string]string,
-) (*CreateFileResponse, *httperr.HTTPError) {
-	f, err := h.filesvc.CreateFile(ctx, userID, fileID, metadata)
+// processCreateSecretRequest processes create file request.
+func (h *Handlers) processCreateSecretRequest(ctx context.Context, userID, secretName string, metadata map[string]string,
+) (*CreateSecretResponse, *httperr.HTTPError) {
+	secret, err := h.filesvc.CreateFile(ctx, userID, secretName, metadata)
 	if err != nil {
-		h.log.Error("failed to create file entry", slog.Any("error", err))
+		if errors.Is(err, filesvc.ErrFileEntryAlreadyExists) {
+			return nil, httperr.NewHTTPError(http.StatusConflict, err)
+		}
+
+		h.log.Error("failed to create file secret entry", slog.Any("error", err))
 
 		return nil, httperr.NewHTTPError(http.StatusBadRequest, err)
 	}
 
-	return &CreateFileResponse{
-		&File{
-			ID:        f.ID(),
-			Name:      f.Name(),
-			Checksum:  f.Checksum(),
-			Size:      f.Size(),
-			Metadata:  f.Metadata(),
-			CreatedAt: f.CreatedAt(),
-			UpdatedAt: f.UpdatedAt(),
+	return &CreateSecretResponse{
+		&Secret{
+			ID:        secret.ID(),
+			Name:      secret.Name(),
+			Metadata:  secret.Metadata(),
+			CreatedAt: secret.CreatedAt(),
+			UpdatedAt: secret.UpdatedAt(),
+			File: &File{
+				Name:     secret.ContentInfo().FileName(),
+				Size:     secret.ContentInfo().Size(),
+				Checksum: secret.ContentInfo().Checksum(),
+			},
 		},
 	}, nil
 }
 
-func (h *Handlers) UpdateFile(w http.ResponseWriter, req *http.Request) {
+// UpdateSecret handles update file request.
+func (h *Handlers) UpdateSecret(w http.ResponseWriter, req *http.Request) {
 	userID := req.Header.Get("X-User-Id")
 	if userID == "" {
 		httperr.HandleError(w, httperr.ErrUsrIDHeaderEmpty)
@@ -104,14 +114,14 @@ func (h *Handlers) UpdateFile(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	fileID := chi.URLParam(req, "fileID")
-	if fileID == "" {
-		httperr.HandleError(w, ErrFileIDEmpty)
+	secretName := chi.URLParam(req, "secretName")
+	if secretName == "" {
+		httperr.HandleError(w, ErrSecretNameEmpty)
 
 		return
 	}
 
-	var payload UpdateFileRequest
+	var payload UpdateSecretRequest
 	if err := h.readBody(req.Body, &payload); err != nil {
 		httperr.HandleError(w, err)
 
@@ -119,7 +129,8 @@ func (h *Handlers) UpdateFile(w http.ResponseWriter, req *http.Request) {
 	}
 	defer req.Body.Close()
 
-	resp, httpErr := h.processUpdateFileRequest(req.Context(), userID, fileID, payload.Name, payload.Metadata)
+	resp, httpErr := h.processUpdateSecretRequest(
+		req.Context(), userID, secretName, payload.File.Name, payload.Metadata)
 	if httpErr != nil {
 		httperr.HandleError(w, httpErr)
 
@@ -129,29 +140,34 @@ func (h *Handlers) UpdateFile(w http.ResponseWriter, req *http.Request) {
 	api.JSONResponse(w, http.StatusAccepted, resp)
 }
 
-func (h *Handlers) processUpdateFileRequest(ctx context.Context, userID, fileID, fileName string, metadata map[string]string,
-) (*UpdateFileResponse, *httperr.HTTPError) {
-	f, err := h.filesvc.UpdateFile(ctx, userID, fileID, fileName, metadata)
+// processUpdateSecretRequest processes update file request.
+func (h *Handlers) processUpdateSecretRequest(ctx context.Context, userID, secretName, fileName string,
+	metadata map[string]string) (*UpdateSecretResponse, *httperr.HTTPError) {
+	secret, err := h.filesvc.UpdateFile(ctx, userID, secretName, fileName, metadata)
 	if err != nil {
 		h.log.Error("failed to update file entry", slog.Any("error", err))
 
 		return nil, httperr.NewHTTPError(http.StatusBadRequest, err)
 	}
 
-	return &UpdateFileResponse{
-		&File{
-			ID:        f.ID(),
-			Name:      f.Name(),
-			Checksum:  f.Checksum(),
-			Size:      f.Size(),
-			Metadata:  f.Metadata(),
-			CreatedAt: f.CreatedAt(),
-			UpdatedAt: f.UpdatedAt(),
+	return &UpdateSecretResponse{
+		&Secret{
+			ID:        secret.ID(),
+			Name:      secret.Name(),
+			Metadata:  secret.Metadata(),
+			CreatedAt: secret.CreatedAt(),
+			UpdatedAt: secret.UpdatedAt(),
+			File: &File{
+				Name:     secret.ContentInfo().FileName(),
+				Size:     secret.ContentInfo().Size(),
+				Checksum: secret.ContentInfo().Checksum(),
+			},
 		},
 	}, nil
 }
 
-func (h *Handlers) ListFiles(w http.ResponseWriter, req *http.Request) {
+// ListSecrets handles list file secrets request.
+func (h *Handlers) ListSecrets(w http.ResponseWriter, req *http.Request) {
 	userID := req.Header.Get("X-User-Id")
 	if userID == "" {
 		httperr.HandleError(w, httperr.ErrUsrIDHeaderEmpty)
@@ -159,7 +175,7 @@ func (h *Handlers) ListFiles(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	resp, err := h.processListFilesRequest(req.Context(), userID)
+	resp, err := h.processListSecretsRequest(req.Context(), userID)
 	if err != nil {
 		httperr.HandleError(w, err)
 
@@ -169,38 +185,43 @@ func (h *Handlers) ListFiles(w http.ResponseWriter, req *http.Request) {
 	api.JSONResponse(w, http.StatusOK, resp)
 }
 
-func (h *Handlers) processListFilesRequest(ctx context.Context, userID string) (*ListFilesResponse, *httperr.HTTPError) {
-	files, err := h.filesvc.ListFiles(ctx, userID)
+// processListFilesRequest processes list files request.
+func (h *Handlers) processListSecretsRequest(ctx context.Context, userID string) (*ListSecretsResponse, *httperr.HTTPError) {
+	secrets, err := h.filesvc.ListFiles(ctx, userID)
 	if err != nil {
 		h.log.Error("failed to list files", slog.Any("error", err))
 
 		return nil, httperr.NewHTTPError(http.StatusBadRequest, err)
 	}
 
-	resp := &ListFilesResponse{
-		Files: make([]*File, 0, len(files)),
+	resp := &ListSecretsResponse{
+		Secrets: make([]*Secret, 0, len(secrets)),
 	}
 
-	for _, f := range files {
-		resp.Files = append(resp.Files, &File{
-			ID:        f.ID(),
-			Name:      f.Name(),
-			Checksum:  f.Checksum(),
-			Size:      f.Size(),
-			Metadata:  f.Metadata(),
-			CreatedAt: f.CreatedAt(),
-			UpdatedAt: f.UpdatedAt(),
+	for _, secret := range secrets {
+		resp.Secrets = append(resp.Secrets, &Secret{
+			ID:        secret.ID(),
+			Name:      secret.Name(),
+			Metadata:  secret.Metadata(),
+			CreatedAt: secret.CreatedAt(),
+			UpdatedAt: secret.UpdatedAt(),
+			File: &File{
+				Name:     secret.ContentInfo().FileName(),
+				Size:     secret.ContentInfo().Size(),
+				Checksum: secret.ContentInfo().Checksum(),
+			},
 		})
 	}
 
-	sort.Slice(resp.Files, func(i, j int) bool {
-		return resp.Files[i].ID < resp.Files[j].ID
+	sort.Slice(resp.Secrets, func(i, j int) bool {
+		return resp.Secrets[i].ID < resp.Secrets[j].ID
 	})
 
 	return resp, nil
 }
 
-func (h *Handlers) GetFile(w http.ResponseWriter, req *http.Request) {
+// GetSecret handles get file request.
+func (h *Handlers) GetSecret(w http.ResponseWriter, req *http.Request) {
 	userID := req.Header.Get("X-User-Id")
 	if userID == "" {
 		httperr.HandleError(w, httperr.ErrUsrIDHeaderEmpty)
@@ -208,14 +229,14 @@ func (h *Handlers) GetFile(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	fileID := chi.URLParam(req, "fileID")
-	if fileID == "" {
-		httperr.HandleError(w, ErrFileIDEmpty)
+	secretName := chi.URLParam(req, "secretName")
+	if secretName == "" {
+		httperr.HandleError(w, ErrSecretNameEmpty)
 
 		return
 	}
 
-	resp, err := h.processGetFileRequest(req.Context(), userID, fileID)
+	resp, err := h.processGetSecretRequest(req.Context(), userID, secretName)
 	if err != nil {
 		httperr.HandleError(w, err)
 
@@ -225,30 +246,35 @@ func (h *Handlers) GetFile(w http.ResponseWriter, req *http.Request) {
 	api.JSONResponse(w, http.StatusOK, resp)
 }
 
-func (h *Handlers) processGetFileRequest(ctx context.Context, userID, fileID string) (*File, *httperr.HTTPError) {
-	f, err := h.filesvc.GetFile(ctx, userID, fileID)
+// processGetSecretRequest processes get file request.
+func (h *Handlers) processGetSecretRequest(ctx context.Context, userID, secretName string) (*Secret, *httperr.HTTPError) {
+	secret, err := h.filesvc.GetFile(ctx, userID, secretName)
 	if err != nil {
 		if errors.Is(err, filesvc.ErrFileEntryNotFound) {
 			return nil, httperr.NewHTTPError(http.StatusNotFound, err)
 		}
 
-		h.log.Error("failed to get file", slog.Any("error", err))
+		h.log.Error("failed to get file secret entry", slog.Any("error", err))
 
 		return nil, httperr.NewHTTPError(http.StatusBadRequest, err)
 	}
 
-	return &File{
-		ID:        f.ID(),
-		Name:      f.Name(),
-		Checksum:  f.Checksum(),
-		Size:      f.Size(),
-		Metadata:  f.Metadata(),
-		CreatedAt: f.CreatedAt(),
-		UpdatedAt: f.UpdatedAt(),
+	return &Secret{
+		ID:        secret.ID(),
+		Name:      secret.Name(),
+		Metadata:  secret.Metadata(),
+		CreatedAt: secret.CreatedAt(),
+		UpdatedAt: secret.UpdatedAt(),
+		File: &File{
+			Name:     secret.ContentInfo().FileName(),
+			Size:     secret.ContentInfo().Size(),
+			Checksum: secret.ContentInfo().Checksum(),
+		},
 	}, nil
 }
 
-func (h *Handlers) UploadFile(w http.ResponseWriter, req *http.Request) {
+// UploadSecret handles upload file request.
+func (h *Handlers) UploadSecret(w http.ResponseWriter, req *http.Request) {
 	userID := req.Header.Get("X-User-Id")
 	if userID == "" {
 		httperr.HandleError(w, httperr.ErrUsrIDHeaderEmpty)
@@ -256,9 +282,9 @@ func (h *Handlers) UploadFile(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	fileID := req.FormValue("file_id")
-	if fileID == "" {
-		httperr.HandleError(w, ErrFileIDEmpty)
+	secretName := req.FormValue("secret_name")
+	if secretName == "" {
+		httperr.HandleError(w, ErrSecretNameEmpty)
 
 		return
 	}
@@ -271,7 +297,7 @@ func (h *Handlers) UploadFile(w http.ResponseWriter, req *http.Request) {
 	}
 	defer file.Close()
 
-	resp, httpErr := h.processUploadFileRequest(req.Context(), userID, fileID, file, fileHeader)
+	resp, httpErr := h.processUploadSecretRequest(req.Context(), userID, secretName, file, fileHeader)
 	if httpErr != nil {
 		httperr.HandleError(w, httpErr)
 
@@ -281,34 +307,37 @@ func (h *Handlers) UploadFile(w http.ResponseWriter, req *http.Request) {
 	api.JSONResponse(w, http.StatusOK, resp)
 }
 
-func (h *Handlers) processUploadFileRequest(ctx context.Context, userID, fileID string,
+// processUploadSecretRequest processes upload file request.
+func (h *Handlers) processUploadSecretRequest(ctx context.Context, userID, secretName string,
 	file multipart.File, fileHeader *multipart.FileHeader,
-) (*UploadFileResponse, *httperr.HTTPError) {
-	f, err := h.filesvc.UploadFile(ctx, userID, fileID, filesvc.UploadFileRequest{
-		Name: fileHeader.Filename,
-		Size: -1, // Must be set explicitly to '-1'.
-		Data: file,
+) (*Secret, *httperr.HTTPError) {
+	secret, err := h.filesvc.UploadFile(ctx, userID, secretName, filesvc.UploadFileRequest{
+		FileName: fileHeader.Filename,
+		Size:     -1, // Must be set explicitly to '-1'.
+		Data:     file,
 	})
 	if err != nil {
-		h.log.Error("failed to upload file", slog.Any("error", err))
+		h.log.Error("failed to upload file secret content", slog.Any("error", err))
 
 		return nil, httperr.NewHTTPError(http.StatusBadRequest, err)
 	}
 
-	return &UploadFileResponse{
-		&File{
-			ID:        f.ID(),
-			Name:      f.Name(),
-			Checksum:  f.Checksum(),
-			Size:      f.Size(),
-			Metadata:  f.Metadata(),
-			CreatedAt: f.CreatedAt(),
-			UpdatedAt: f.UpdatedAt(),
+	return &Secret{
+		ID:        secret.ID(),
+		Name:      secret.Name(),
+		Metadata:  secret.Metadata(),
+		CreatedAt: secret.CreatedAt(),
+		UpdatedAt: secret.UpdatedAt(),
+		File: &File{
+			Name:     secret.ContentInfo().FileName(),
+			Size:     secret.ContentInfo().Size(),
+			Checksum: secret.ContentInfo().Checksum(),
 		},
 	}, nil
 }
 
-func (h *Handlers) DownloadFile(w http.ResponseWriter, req *http.Request) {
+// DownloadSecret handles download file secret content request.
+func (h *Handlers) DownloadSecret(w http.ResponseWriter, req *http.Request) {
 	userID := req.Header.Get("X-User-Id")
 	if userID == "" {
 		httperr.HandleError(w, httperr.ErrUsrIDHeaderEmpty)
@@ -316,14 +345,14 @@ func (h *Handlers) DownloadFile(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	fileID := chi.URLParam(req, "fileID")
-	if fileID == "" {
-		httperr.HandleError(w, ErrFileIDEmpty)
+	secretName := chi.URLParam(req, "secretName")
+	if secretName == "" {
+		httperr.HandleError(w, ErrSecretNameEmpty)
 
 		return
 	}
 
-	filename, stream, httpErr := h.processDownloadFileRequest(req.Context(), userID, fileID)
+	filename, stream, httpErr := h.processDownloadSecretContentRequest(req.Context(), userID, secretName)
 	if httpErr != nil {
 		httperr.HandleError(w, httpErr)
 
@@ -341,22 +370,25 @@ func (h *Handlers) DownloadFile(w http.ResponseWriter, req *http.Request) {
 	}
 }
 
-func (h *Handlers) processDownloadFileRequest(ctx context.Context, userID, fileID string) (string, io.ReadCloser, *httperr.HTTPError) {
-	f, rd, err := h.filesvc.DownloadFile(ctx, userID, fileID)
+// processDownloadSecretContentRequest processes download file request.
+func (h *Handlers) processDownloadSecretContentRequest(ctx context.Context, userID, secretName string,
+) (string, io.ReadCloser, *httperr.HTTPError) {
+	secret, rd, err := h.filesvc.DownloadFile(ctx, userID, secretName)
 	if err != nil {
-		if errors.Is(err, filesvc.ErrFileObjectNotFound) {
+		if errors.Is(err, filesvc.ErrFileEntryNotFound) {
 			return "", nil, httperr.NewHTTPError(http.StatusNotFound, err)
 		}
 
-		h.log.Error("failed to download file", slog.Any("error", err))
+		h.log.Error("failed to download file secret content", slog.Any("error", err))
 
 		return "", nil, httperr.NewHTTPError(http.StatusBadRequest, err)
 	}
 
-	return f.Name(), rd, nil
+	return secret.Name(), rd, nil
 }
 
-func (h *Handlers) DeleteFile(w http.ResponseWriter, req *http.Request) {
+// DeleteSecret handles delete file request.
+func (h *Handlers) DeleteSecret(w http.ResponseWriter, req *http.Request) {
 	userID := req.Header.Get("X-User-Id")
 	if userID == "" {
 		httperr.HandleError(w, httperr.ErrUsrIDHeaderEmpty)
@@ -364,14 +396,14 @@ func (h *Handlers) DeleteFile(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	fileID := chi.URLParam(req, "fileID")
-	if fileID == "" {
-		httperr.HandleError(w, ErrFileIDEmpty)
+	secretName := chi.URLParam(req, "secretName")
+	if secretName == "" {
+		httperr.HandleError(w, ErrSecretNameEmpty)
 
 		return
 	}
 
-	err := h.processDeleteFileRequest(req.Context(), userID, fileID)
+	err := h.processDeleteSecretRequest(req.Context(), userID, secretName)
 	if err != nil {
 		httperr.HandleError(w, err)
 
@@ -381,14 +413,15 @@ func (h *Handlers) DeleteFile(w http.ResponseWriter, req *http.Request) {
 	api.JSONResponse(w, http.StatusNoContent, nil)
 }
 
-func (h *Handlers) processDeleteFileRequest(ctx context.Context, userID, fileID string) *httperr.HTTPError {
-	err := h.filesvc.DeleteFile(ctx, userID, fileID)
+// processDeleteSecretRequest processes delete the secret request.
+func (h *Handlers) processDeleteSecretRequest(ctx context.Context, userID, secretName string) *httperr.HTTPError {
+	err := h.filesvc.DeleteFile(ctx, userID, secretName)
 	if err != nil {
 		if errors.Is(err, filesvc.ErrFileEntryNotFound) {
 			return httperr.NewHTTPError(http.StatusNotFound, err)
 		}
 
-		h.log.Error("failed to delete file", slog.Any("error", err))
+		h.log.Error("failed to delete file secret entry", slog.Any("error", err))
 
 		return httperr.NewHTTPError(http.StatusBadRequest, err)
 	}
@@ -396,6 +429,7 @@ func (h *Handlers) processDeleteFileRequest(ctx context.Context, userID, fileID 
 	return nil
 }
 
+// readBody reads request body.
 func (h *Handlers) readBody(body io.ReadCloser, v any) *httperr.HTTPError {
 	err := json.NewDecoder(body).Decode(v)
 	if err != nil {

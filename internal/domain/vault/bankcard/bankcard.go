@@ -4,15 +4,13 @@ package bankcard
 import (
 	"fmt"
 	"strconv"
-	"strings"
 	"time"
-	"unicode"
 
 	"github.com/andymarkow/gophkeeper/internal/cryptutils"
 )
 
-// BankCard represents bank card.
-type BankCard struct {
+// Bankcard represents bank card.
+type Bankcard struct {
 	id        string
 	userID    string
 	metadata  map[string]string
@@ -30,8 +28,8 @@ type Data struct {
 }
 
 func CreateData(number, name, cvv, expireAt string) (*Data, error) {
-	if !validateCardNumber(number) {
-		return nil, fmt.Errorf("invalid card number")
+	if number == "" {
+		return nil, fmt.Errorf("card number must not be empty")
 	}
 
 	if err := validateCardCvv(cvv); err != nil {
@@ -75,17 +73,17 @@ func NewEmptyData() *Data {
 	return &Data{}
 }
 
-// CreateBankCard creates a new bank card.
-func CreateBankCard(id, userID string, metadata map[string]string, data *Data) (*BankCard, error) {
+// CreateBankcard creates a new bank card.
+func CreateBankcard(id, userID string, metadata map[string]string, data *Data) (*Bankcard, error) {
 	if data == nil {
 		return nil, fmt.Errorf("data must not be empty")
 	}
 
-	return NewBankCard(id, userID, metadata, time.Now(), time.Now(), data)
+	return NewBankcard(id, userID, metadata, time.Now(), time.Now(), data)
 }
 
-// NewBankCard creates a new bank card.
-func NewBankCard(id, userID string, metadata map[string]string, createdAt, updatedAt time.Time, data *Data) (*BankCard, error) {
+// NewBankcard creates a new bank card.
+func NewBankcard(id, userID string, metadata map[string]string, createdAt, updatedAt time.Time, data *Data) (*Bankcard, error) {
 	if id == "" {
 		return nil, fmt.Errorf("id must not be empty")
 	}
@@ -98,7 +96,7 @@ func NewBankCard(id, userID string, metadata map[string]string, createdAt, updat
 		return nil, fmt.Errorf("data must not be empty")
 	}
 
-	return &BankCard{
+	return &Bankcard{
 		id:        id,
 		userID:    userID,
 		metadata:  metadata,
@@ -109,37 +107,37 @@ func NewBankCard(id, userID string, metadata map[string]string, createdAt, updat
 }
 
 // ID returns the id of the bank card.
-func (c *BankCard) ID() string {
+func (c *Bankcard) ID() string {
 	return c.id
 }
 
 // UserID returns the user login of the bank card.
-func (c *BankCard) UserID() string {
+func (c *Bankcard) UserID() string {
 	return c.userID
 }
 
 // Metadata returns the metadata of the bank card.
-func (c *BankCard) Metadata() map[string]string {
+func (c *Bankcard) Metadata() map[string]string {
 	return c.metadata
 }
 
 // CreatedAt returns the create at of the bank card.
-func (c *BankCard) CreatedAt() time.Time {
+func (c *Bankcard) CreatedAt() time.Time {
 	return c.createdAt
 }
 
 // UpdatedAt returns the update at of the bank card.
-func (c *BankCard) UpdatedAt() time.Time {
+func (c *Bankcard) UpdatedAt() time.Time {
 	return c.updatedAt
 }
 
 // SetData sets the data of the bank card.
-func (c *BankCard) SetData(data *Data) {
+func (c *Bankcard) SetData(data *Data) {
 	c.data = data
 }
 
 // Data returns the data of the bank card.
-func (c *BankCard) Data() *Data {
+func (c *Bankcard) Data() *Data {
 	return c.data
 }
 
@@ -221,35 +219,6 @@ func (d *Data) Decrypt(key []byte) (*Data, error) {
 		cvv:      cvv,
 		expireAt: expireAt,
 	}, nil
-}
-
-// validateCardNumber checks id is valid or not based on Luhn algorithm.
-func validateCardNumber(cardNumber string) bool {
-	cardNumber = strings.ReplaceAll(cardNumber, " ", "")
-
-	var sum int
-	double := false
-
-	for i := len(cardNumber) - 1; i >= 0; i-- {
-		n := cardNumber[i]
-
-		if !unicode.IsDigit(rune(n)) {
-			return false // invalid character
-		}
-
-		digit := int(n - '0')
-		if double {
-			digit *= 2
-			if digit > 9 {
-				digit -= 9
-			}
-		}
-
-		sum += digit
-		double = !double
-	}
-
-	return sum%10 == 0
 }
 
 // validateCardCvv checks the card CVV value is valid.

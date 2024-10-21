@@ -1,21 +1,21 @@
-// Package files provides the files API.
-package files
+// Package texts provides the texts API.
+package texts
 
 import (
 	"log/slog"
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/andymarkow/gophkeeper/internal/services/filesvc"
+	"github.com/andymarkow/gophkeeper/internal/services/textsvc"
 )
 
-// config represents the configuration for the files API router.
+// config represents the configuration for the texts API router.
 type config struct {
 	logger *slog.Logger
 }
 
-// NewRouter creates a new files API router.
-func NewRouter(svc filesvc.Service, opts ...Option) chi.Router {
+// NewRouter creates a new texts API router.
+func NewRouter(svc textsvc.Service, opts ...Option) chi.Router {
 	cfg := &config{
 		logger: slog.New(&slog.JSONHandler{}),
 	}
@@ -39,7 +39,7 @@ func NewRouter(svc filesvc.Service, opts ...Option) chi.Router {
 	})
 }
 
-// Option is a router option.
+// Option represents a router option.
 type Option func(*config)
 
 // WithLogger is a router option that sets the logger.

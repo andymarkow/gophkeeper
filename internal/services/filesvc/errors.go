@@ -3,6 +3,7 @@ package filesvc
 import "errors"
 
 var (
-	ErrFileEntryNotFound  = errors.New("file not found")
-	ErrFileObjectNotFound = errors.New("file object not found")
+	ErrFileEntryAlreadyExists = errors.New("file entry already exists")
+	ErrFileEntryNotFound      = errors.New("file entry not found")
+	ErrFileObjectNotFound     = errors.New("file object not found")
 )

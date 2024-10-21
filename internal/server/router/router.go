@@ -12,9 +12,11 @@ import (
 	"github.com/andymarkow/gophkeeper/internal/api/v1/secrets/bankcards"
 	"github.com/andymarkow/gophkeeper/internal/api/v1/secrets/credentials"
 	"github.com/andymarkow/gophkeeper/internal/api/v1/secrets/files"
+	"github.com/andymarkow/gophkeeper/internal/api/v1/secrets/texts"
 	"github.com/andymarkow/gophkeeper/internal/api/v1/users"
 	"github.com/andymarkow/gophkeeper/internal/middlewares"
 	"github.com/andymarkow/gophkeeper/internal/services/filesvc"
+	"github.com/andymarkow/gophkeeper/internal/services/textsvc"
 	"github.com/andymarkow/gophkeeper/internal/storage/cardrepo"
 	"github.com/andymarkow/gophkeeper/internal/storage/credrepo"
 	"github.com/andymarkow/gophkeeper/internal/storage/userrepo"
@@ -28,8 +30,8 @@ type options struct {
 }
 
 // NewRouter creates a new API router.
-func NewRouter(userStorage userrepo.Storage, cardStorage cardrepo.Storage,
-	credStorage credrepo.Storage, fileSvc filesvc.Service, opts ...Option,
+func NewRouter(userStorage userrepo.Storage, cardStorage cardrepo.Storage, credStorage credrepo.Storage,
+	textSvc textsvc.Service, fileSvc filesvc.Service, opts ...Option,
 ) chi.Router {
 	defOpts := &options{
 		logger: slog.New(&slog.JSONHandler{}),
@@ -50,6 +52,8 @@ func NewRouter(userStorage userrepo.Storage, cardStorage cardrepo.Storage,
 	})
 
 	credsAPI := credentials.NewRouter(credStorage, defOpts.cryptoKey, credentials.WithRouterLogger(defOpts.logger))
+
+	textsAPI := texts.NewRouter(textSvc, texts.WithLogger(defOpts.logger))
 
 	filesAPI := files.NewRouter(fileSvc, files.WithLogger(defOpts.logger))
 
@@ -73,6 +77,7 @@ func NewRouter(userStorage userrepo.Storage, cardStorage cardrepo.Storage,
 
 			r.Mount("/bankcards", cardsAPI)
 			r.Mount("/credentials", credsAPI)
+			r.Mount("/texts", textsAPI)
 			r.Mount("/files", filesAPI)
 		})
 	})

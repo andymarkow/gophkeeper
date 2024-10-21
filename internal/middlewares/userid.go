@@ -20,16 +20,16 @@ func UserID(next http.Handler) http.Handler {
 			return
 		}
 
-		// Fetch the user login from the JWT sub claim field.
-		userLogin := token.Subject()
+		// Fetch the user ID from the JWT sub claim field.
+		userID := token.Subject()
 
-		if userLogin == "" {
-			httperr.HandleError(w, httperr.NewHTTPError(http.StatusUnauthorized, errors.New("user login is empty")))
+		if userID == "" {
+			httperr.HandleError(w, httperr.NewHTTPError(http.StatusUnauthorized, errors.New("user ID is empty")))
 
 			return
 		}
 
-		req.Header.Set("X-User-Id", userLogin)
+		req.Header.Set("X-User-Id", userID)
 
 		next.ServeHTTP(w, req)
 	})

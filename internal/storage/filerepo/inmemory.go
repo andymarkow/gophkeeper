@@ -5,13 +5,14 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/andymarkow/gophkeeper/internal/domain/vault/fileobj"
+	"github.com/andymarkow/gophkeeper/internal/domain/vault/file"
 )
+
+var _ Storage = (*InMemory)(nil)
 
 // InMemory represents in-memory files storage.
 type InMemory struct {
-	// UserID -> Login -> File.
-	files map[string]map[string]fileobj.File
+	secrets map[string]map[string]file.Secret
 
 	mu sync.RWMutex
 }
@@ -19,121 +20,121 @@ type InMemory struct {
 // NewInMemory creates new in-memory files storage.
 func NewInMemory() *InMemory {
 	return &InMemory{
-		files: make(map[string]map[string]fileobj.File),
+		secrets: make(map[string]map[string]file.Secret),
 	}
 }
 
-// AddFile adds a new file to the storage.
-func (s *InMemory) AddFile(_ context.Context, file *fileobj.File) (*fileobj.File, error) {
+// AddSecret adds a new secret entry to the storage.
+func (s *InMemory) AddSecret(_ context.Context, secret *file.Secret) (*file.Secret, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	// Check if the user login entry exists in the storage.
-	files, ok := s.files[file.UserID()]
+	secrets, ok := s.secrets[secret.UserID()]
 	if !ok {
-		// Check if files entry is nil.
-		if files == nil {
+		// Check if secrets entry is nil.
+		if secrets == nil {
 			// Initialize files entry.
-			s.files[file.UserID()] = make(map[string]fileobj.File)
+			s.secrets[secret.UserID()] = make(map[string]file.Secret)
 		}
 
 		// UserID does not exist in the storage. Add user login and file to the storage.
-		s.files[file.UserID()][file.ID()] = *file
+		s.secrets[secret.UserID()][secret.Name()] = *secret
 
-		return file, nil
+		return secret, nil
 	}
 
-	if _, ok := files[file.ID()]; ok {
-		// File already exists in the storage.
-		return nil, fmt.Errorf("%w: %s", ErrFileAlreadyExists, file.ID())
+	if _, ok := secrets[secret.Name()]; ok {
+		// Secret already exists in the storage.
+		return nil, fmt.Errorf("%w: %s", ErrSecretAlreadyExists, secret.Name())
 	}
 
-	// Add file to the storage.
-	s.files[file.UserID()][file.ID()] = *file
+	// Add secret to the storage.
+	s.secrets[secret.UserID()][secret.Name()] = *secret
 
-	return file, nil
+	return secret, nil
 }
 
-// GetFile returns a file from the storage.
-func (s *InMemory) GetFile(_ context.Context, userID, fileID string) (*fileobj.File, error) {
+// GetSecret returns a secret entry from the storage.
+func (s *InMemory) GetSecret(_ context.Context, userID, secretName string) (*file.Secret, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
 	// Check if the user login entry exists in the storage.
-	files, ok := s.files[userID]
+	secrets, ok := s.secrets[userID]
 	if !ok {
-		return nil, fmt.Errorf("%w for user login %s: %s", ErrFileNotFound, userID, fileID)
+		return nil, fmt.Errorf("%w for user login %s and secret id %s", ErrSecretNotFound, userID, secretName)
 	}
 
-	// Check if the file entry exists in the storage.
-	if file, ok := files[fileID]; ok {
-		f := file
+	// Check if the secret entry exists in the storage.
+	if secret, ok := secrets[secretName]; ok {
+		s := secret
 
-		return &f, nil
+		return &s, nil
 	}
 
-	return nil, fmt.Errorf("%w for user login %s: %s", ErrFileNotFound, userID, fileID)
+	return nil, fmt.Errorf("%w for user login %s: %s", ErrSecretNotFound, userID, secretName)
 }
 
-// ListFiles returns a list of files from the storage.
-func (s *InMemory) ListFiles(_ context.Context, userID string) ([]*fileobj.File, error) {
+// ListSecrets returns a list of secret entries from the storage.
+func (s *InMemory) ListSecrets(_ context.Context, userID string) ([]*file.Secret, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	files := s.files[userID]
+	secrets := s.secrets[userID]
 
-	fl := make([]*fileobj.File, 0, len(files))
+	sl := make([]*file.Secret, 0, len(secrets))
 
-	for _, file := range files {
-		f := file
-		fl = append(fl, &f)
+	for _, secret := range secrets {
+		s := secret
+		sl = append(sl, &s)
 	}
 
-	return fl, nil
+	return sl, nil
 }
 
-// UpdateFile updates a file in the storage.
-func (s *InMemory) UpdateFile(_ context.Context, file *fileobj.File) (*fileobj.File, error) {
+// UpdateSecret updates a secret entry in the storage.
+func (s *InMemory) UpdateSecret(_ context.Context, secret *file.Secret) (*file.Secret, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	// Check if the user login entry exists in the storage.
-	files, ok := s.files[file.UserID()]
+	secrets, ok := s.secrets[secret.UserID()]
 	if !ok {
-		return nil, fmt.Errorf("%w for user login %s: %s", ErrFileNotFound, file.UserID(), file.ID())
+		return nil, fmt.Errorf("%w for user login %s: %s", ErrSecretNotFound, secret.UserID(), secret.Name())
 	}
 
-	// Check if the file entry exists in the storage.
-	if _, ok := files[file.ID()]; !ok {
-		return nil, fmt.Errorf("%w for user login %s: %s", ErrFileNotFound, file.UserID(), file.ID())
+	// Check if the secret entry exists in the storage.
+	if _, ok := secrets[secret.Name()]; !ok {
+		return nil, fmt.Errorf("%w for user login %s: %s", ErrSecretNotFound, secret.UserID(), secret.Name())
 	}
 
-	// Update file in the storage.
-	s.files[file.UserID()][file.ID()] = *file
+	// Update secret entry in the storage.
+	s.secrets[secret.UserID()][secret.Name()] = *secret
 
-	f := s.files[file.UserID()][file.ID()]
+	f := s.secrets[secret.UserID()][secret.Name()]
 
 	return &f, nil
 }
 
-// DeleteFile deletes a file from the storage.
-func (s *InMemory) DeleteFile(_ context.Context, userID, fileID string) error {
+// DeleteSecret deletes a secret entry from the storage.
+func (s *InMemory) DeleteSecret(_ context.Context, userID, secretName string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	// Check if the user login entry exists in the storage.
-	files, ok := s.files[userID]
+	secrets, ok := s.secrets[userID]
 	if !ok {
-		return fmt.Errorf("%w for user login %s: %s", ErrFileNotFound, userID, fileID)
+		return fmt.Errorf("%w for user login %s: %s", ErrSecretNotFound, userID, secretName)
 	}
 
-	// Check if the file entry exists in the storage.
-	if _, ok := files[fileID]; !ok {
-		return fmt.Errorf("%w for user login %s: %s", ErrFileNotFound, userID, fileID)
+	// Check if the secret entry exists in the storage.
+	if _, ok := secrets[secretName]; !ok {
+		return fmt.Errorf("%w for user login %s: %s", ErrSecretNotFound, userID, secretName)
 	}
 
-	// Delete file from the storage.
-	delete(s.files[userID], fileID)
+	// Delete secret entry from the storage.
+	delete(s.secrets[userID], secretName)
 
 	return nil
 }

@@ -93,7 +93,7 @@ func (h *Handlers) processCreateCardRequest(ctx context.Context, userID string, 
 		return httperr.NewHTTPError(http.StatusInternalServerError, err)
 	}
 
-	card, err := bankcard.CreateBankCard(payload.ID, userID, payload.Metadata, encData)
+	card, err := bankcard.CreateBankcard(payload.ID, userID, payload.Metadata, encData)
 	if err != nil {
 		h.log.Error("failed to create bank card", slog.Any("error", err))
 
@@ -284,7 +284,7 @@ func (h *Handlers) processUpdateCardRequest(ctx context.Context, userID, cardID 
 		return httperr.NewHTTPError(http.StatusInternalServerError, err)
 	}
 
-	card, err := bankcard.CreateBankCard(cardID, userID, payload.Metadata, encData)
+	card, err := bankcard.CreateBankcard(cardID, userID, payload.Metadata, encData)
 	if err != nil {
 		h.log.Error("failed to create bank card", slog.Any("error", err))
 

@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/andymarkow/gophkeeper/internal/cryptutils"
-	"github.com/andymarkow/gophkeeper/internal/domain/vault/fileobj"
+	"github.com/andymarkow/gophkeeper/internal/domain/vault/file"
 	"github.com/andymarkow/gophkeeper/internal/storage/filerepo"
 	"github.com/andymarkow/gophkeeper/internal/storage/objrepo"
 )
@@ -21,7 +21,7 @@ var _ Service = (*FileService)(nil)
 // FileService represents the service.
 type FileService struct {
 	log         *slog.Logger
-	fileStorage filerepo.Storage
+	dbStorage   filerepo.Storage
 	objStorage  objrepo.Storage
 	objBasePath string
 	cryptoKey   []byte
@@ -30,9 +30,9 @@ type FileService struct {
 // NewFileService creates a new service.
 func NewFileService(filestore filerepo.Storage, objstore objrepo.Storage, opts ...Option) *FileService {
 	svc := &FileService{
-		log:         slog.New(&slog.JSONHandler{}),
-		fileStorage: filestore,
-		objStorage:  objstore,
+		log:        slog.New(&slog.JSONHandler{}),
+		dbStorage:  filestore,
+		objStorage: objstore,
 	}
 
 	for _, opt := range opts {
@@ -66,57 +66,54 @@ func WithObjectBasePath(path string) Option {
 	}
 }
 
-// CreateFileRequest represents a request for creating a file.
-type CreateFileRequest struct {
-	Name     string
-	Size     int64
-	Metadata map[string]string
-	Data     io.Reader
-}
-
 // CreateFile creates a new file entry in the file storage.
-func (s *FileService) CreateFile(ctx context.Context, userID, fileID string, metadata map[string]string) (*fileobj.File, error) {
+func (s *FileService) CreateFile(ctx context.Context, userID, secretName string, metadata map[string]string) (*file.Secret, error) {
 	// Create new file object entry to store it in the file storage.
-	repoFile, err := fileobj.CreateEmptyFileEntry(fileID, userID, metadata)
+	secret, err := file.CreateSecret(secretName, userID, metadata)
 	if err != nil {
-		return nil, fmt.Errorf("fileobj.NewFile: %w", err)
+		return nil, fmt.Errorf("file.CreateSecret: %w", err)
 	}
 
 	// Store the file object entry in the file storage.
-	file, err := s.fileStorage.AddFile(ctx, repoFile)
+	secretEntry, err := s.dbStorage.AddSecret(ctx, secret)
 	if err != nil {
+		if errors.Is(err, filerepo.ErrSecretAlreadyExists) {
+			return nil, ErrFileEntryAlreadyExists
+		}
+
 		return nil, fmt.Errorf("storage.AddFile: %w", err)
 	}
 
-	return file, nil
+	return secretEntry, nil
 }
 
 // UpdateFile updates the file metadata.
-func (s *FileService) UpdateFile(ctx context.Context, userID, fileID, fileName string, metadata map[string]string) (*fileobj.File, error) {
+func (s *FileService) UpdateFile(ctx context.Context, userID, secretName, fileName string,
+	metadata map[string]string) (*file.Secret, error) {
 	// Get the file object entry from the file storage.
-	file, err := s.fileStorage.GetFile(ctx, userID, fileID)
+	secret, err := s.dbStorage.GetSecret(ctx, userID, secretName)
 	if err != nil {
-		if errors.Is(err, filerepo.ErrFileNotFound) {
+		if errors.Is(err, filerepo.ErrSecretNotFound) {
 			return nil, ErrFileEntryNotFound
 		}
 
 		return nil, fmt.Errorf("storage.GetFile: %w", err)
 	}
 
-	if fileName != "" {
-		file.SetName(fileName)
-	}
-
 	if metadata != nil {
-		file.AddMetadata(metadata)
+		secret.AddMetadata(metadata)
 	}
 
-	file.SetUpdatedAt(time.Now())
+	if fileName != "" {
+		secret.ContentInfo().SetFileName(fileName)
+	}
+
+	secret.SetUpdatedAt(time.Now())
 
 	// Update the file object entry in the file storage.
-	f, err := s.fileStorage.UpdateFile(ctx, file)
+	f, err := s.dbStorage.UpdateSecret(ctx, secret)
 	if err != nil {
-		return nil, fmt.Errorf("storage.UpdateFile: %w", err)
+		return nil, fmt.Errorf("storage.UpdateSecret: %w", err)
 	}
 
 	return f, nil
@@ -124,18 +121,18 @@ func (s *FileService) UpdateFile(ctx context.Context, userID, fileID, fileName s
 
 // UploadFileRequest represents a request for uploading a file.
 type UploadFileRequest struct {
-	Name string
-	Size int64
-	Data io.Reader
+	FileName string
+	Size     int64
+	Data     io.Reader
 }
 
 // UploadFile uploads a file content to the object storage.
-func (s *FileService) UploadFile(ctx context.Context, userID, objID string, req UploadFileRequest) (*fileobj.File, error) {
+func (s *FileService) UploadFile(ctx context.Context, userID, secretName string, req UploadFileRequest) (*file.Secret, error) {
 	// Get the file object entry from the file storage.
 	// This must exists before the file data is uploaded to the object storage.
-	f, err := s.fileStorage.GetFile(ctx, userID, objID)
+	secret, err := s.dbStorage.GetSecret(ctx, userID, secretName)
 	if err != nil {
-		if errors.Is(err, filerepo.ErrFileNotFound) {
+		if errors.Is(err, filerepo.ErrSecretNotFound) {
 			return nil, ErrFileEntryNotFound
 		}
 
@@ -150,9 +147,7 @@ func (s *FileService) UploadFile(ctx context.Context, userID, objID string, req 
 		return nil, fmt.Errorf("cryptutils.EncryptStream: %w", err)
 	}
 
-	objName := s.getObjName(userID, objID)
-
-	s.log.Debug("uploading file to the object storage", slog.String("object", objName))
+	objName := s.getObjName(userID, secret.ID())
 
 	// Put the file data to the object storage.
 	info, err := s.objStorage.PutObject(ctx, objName, req.Size, stream.Stream())
@@ -163,76 +158,73 @@ func (s *FileService) UploadFile(ctx context.Context, userID, objID string, req 
 	// Calculate the checksum after the Reader has been fully read.
 	checksum := hash.Sum32()
 
-	s.log.Debug("uploaded file to the object storage", slog.String("object", objName))
-
-	fileEntry, err := fileobj.NewFile(f.ID(), f.UserID(), req.Name, info.Location(), fmt.Sprintf("%d", checksum),
-		stream.SaltHex(), stream.IVHex(), info.Size(), f.Metadata(), f.CreatedAt(), time.Now())
+	// Create new content info object for the secret.
+	contInfo, err := file.NewContentInfo(req.FileName, info.Location(), fmt.Sprintf("%d", checksum), stream.SaltHex(), stream.IVHex(), info.Size())
 	if err != nil {
-		return nil, fmt.Errorf("fileobj.NewFile: %w", err)
+		return nil, fmt.Errorf("file.NewContentInfo: %w", err)
 	}
 
-	s.log.Debug("updating file entry in the file storage", slog.String("object", objName))
+	secret.SetContentInfo(contInfo)
+	secret.SetUpdatedAt(time.Now())
 
-	updFile, err := s.fileStorage.UpdateFile(ctx, fileEntry)
+	updFile, err := s.dbStorage.UpdateSecret(ctx, secret)
 	if err != nil {
-		return nil, fmt.Errorf("storage.UpdateFile: %w", err)
+		return nil, fmt.Errorf("storage.UpdateSecret: %w", err)
 	}
-
-	s.log.Debug("updated file entry in the file storage", slog.String("object", objName))
 
 	return updFile, nil
 }
 
 // ListFiles returns a list of files for the user.
-func (s *FileService) ListFiles(ctx context.Context, userID string) ([]*fileobj.File, error) {
-	files, err := s.fileStorage.ListFiles(ctx, userID)
+func (s *FileService) ListFiles(ctx context.Context, userID string) ([]*file.Secret, error) {
+	files, err := s.dbStorage.ListSecrets(ctx, userID)
 	if err != nil {
-		return nil, fmt.Errorf("storage.ListFiles: %w", err)
+		return nil, fmt.Errorf("storage.ListSecrets: %w", err)
 	}
 
 	return files, nil
 }
 
 // GetFile returns a file for the user.
-func (s *FileService) GetFile(ctx context.Context, userID, objID string) (*fileobj.File, error) {
-	file, err := s.fileStorage.GetFile(ctx, userID, objID)
+func (s *FileService) GetFile(ctx context.Context, userID, secretName string) (*file.Secret, error) {
+	file, err := s.dbStorage.GetSecret(ctx, userID, secretName)
 	if err != nil {
-		if errors.Is(err, filerepo.ErrFileNotFound) {
+		if errors.Is(err, filerepo.ErrSecretNotFound) {
 			return nil, ErrFileEntryNotFound
 		}
 
-		return nil, fmt.Errorf("storage.GetFile: %w", err)
+		return nil, fmt.Errorf("storage.GetSecret: %w", err)
 	}
 
 	return file, nil
 }
 
 // DownloadFile downloads a file from the object storage.
-func (s *FileService) DownloadFile(ctx context.Context, userID, objID string) (*fileobj.File, io.ReadCloser, error) {
-	file, err := s.fileStorage.GetFile(ctx, userID, objID)
+func (s *FileService) DownloadFile(ctx context.Context, userID, secretName string) (*file.Secret, io.ReadCloser, error) {
+	secret, err := s.dbStorage.GetSecret(ctx, userID, secretName)
 	if err != nil {
-		if errors.Is(err, filerepo.ErrFileNotFound) {
+		if errors.Is(err, filerepo.ErrSecretNotFound) {
 			return nil, nil, ErrFileEntryNotFound
 		}
 
-		return nil, nil, fmt.Errorf("storage.GetFile: %w", err)
+		return nil, nil, fmt.Errorf("storage.GetSecret: %w", err)
 	}
 
-	objName := s.getObjName(userID, objID)
+	objName := s.getObjName(userID, secret.ID())
 
 	obj, err := s.objStorage.GetObject(ctx, objName)
 	if err != nil {
 		return nil, nil, fmt.Errorf("storage.GetObject: %w", err)
 	}
 
-	salt, err := hex.DecodeString(file.Salt())
+	salt, err := hex.DecodeString(secret.ContentInfo().Salt())
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to decode salt: %w", err)
 	}
 
-	iv, err := hex.DecodeString(file.IV())
+	iv, err := hex.DecodeString(secret.ContentInfo().IV())
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to decode iv: %w", err)
+		return nil, nil, fmt.Errorf("failed to decode init vector: %w", err)
 	}
 
 	stream, err := cryptutils.DecryptStream(s.cryptoKey, salt, iv, obj)
@@ -244,12 +236,21 @@ func (s *FileService) DownloadFile(ctx context.Context, userID, objID string) (*
 		return nil, nil, fmt.Errorf("cryptutils.DecryptStream: %w", err)
 	}
 
-	return file, stream, nil
+	return secret, stream, nil
 }
 
 // DeleteFile deletes a file entry in the file storage and object storage.
-func (s *FileService) DeleteFile(ctx context.Context, userID, objID string) error {
-	objName := s.getObjName(userID, objID)
+func (s *FileService) DeleteFile(ctx context.Context, userID, secretName string) error {
+	secret, err := s.dbStorage.GetSecret(ctx, userID, secretName)
+	if err != nil {
+		if errors.Is(err, filerepo.ErrSecretNotFound) {
+			return ErrFileEntryNotFound
+		}
+
+		return fmt.Errorf("storage.GetSecret: %w", err)
+	}
+
+	objName := s.getObjName(userID, secret.ID())
 
 	_, found, err := s.statObject(ctx, objName)
 	if err != nil {
@@ -265,20 +266,20 @@ func (s *FileService) DeleteFile(ctx context.Context, userID, objID string) erro
 		return fmt.Errorf("storage.RemoveObject: %w", err)
 	}
 
-	err = s.fileStorage.DeleteFile(ctx, userID, objID)
+	err = s.dbStorage.DeleteSecret(ctx, userID, secretName)
 	if err != nil {
-		if errors.Is(err, filerepo.ErrFileNotFound) {
+		if errors.Is(err, filerepo.ErrSecretNotFound) {
 			return ErrFileEntryNotFound
 		}
 
-		return fmt.Errorf("storage.RemoveFile: %w", err)
+		return fmt.Errorf("storage.DeleteSecret: %w", err)
 	}
 
 	return nil
 }
 
-func (s *FileService) getObjName(userID, objID string) string {
-	objName := fmt.Sprintf("%s/%s", userID, objID)
+func (s *FileService) getObjName(userID, secretID string) string {
+	objName := fmt.Sprintf("%s/%s", userID, secretID)
 
 	if s.objBasePath != "" {
 		objName = fmt.Sprintf("%s/%s", s.objBasePath, objName)

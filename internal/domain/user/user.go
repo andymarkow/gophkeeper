@@ -4,17 +4,23 @@ package user
 import (
 	"fmt"
 
+	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
 )
 
 // User represents a user.
 type User struct {
+	id       string
 	login    string
 	password string
 }
 
 // NewUser creates a new user.
-func NewUser(login, password string) (*User, error) {
+func NewUser(id, login, password string) (*User, error) {
+	if id == "" {
+		return nil, fmt.Errorf("id must not be empty")
+	}
+
 	if login == "" {
 		return nil, fmt.Errorf("login must not be empty")
 	}
@@ -24,6 +30,7 @@ func NewUser(login, password string) (*User, error) {
 	}
 
 	return &User{
+		id:       id,
 		login:    login,
 		password: password,
 	}, nil
@@ -40,7 +47,12 @@ func CreateUser(login, password string) (*User, error) {
 		return nil, fmt.Errorf("bcrypt.GenerateFromPassword: %w", err)
 	}
 
-	return NewUser(login, string(pwdHash))
+	return NewUser(uuid.New().String(), login, string(pwdHash))
+}
+
+// ID returns the ID of the user.
+func (u *User) ID() string {
+	return u.id
 }
 
 // Login returns the login of the user.

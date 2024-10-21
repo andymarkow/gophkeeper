@@ -90,7 +90,7 @@ func (h *Handlers) CreateUser(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	token, err := h.auth.CreateJWTString(usr.Login())
+	token, err := h.auth.CreateJWTString(usr.ID())
 	if err != nil {
 		h.log.Error("jwtauth.CreateJWTString", slog.Any("error", err))
 		httperr.HandleError(w, httperr.NewHTTPError(http.StatusInternalServerError, err))
@@ -151,7 +151,7 @@ func (h *Handlers) LoginUser(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	token, err := h.auth.CreateJWTString(usr.Login())
+	token, err := h.auth.CreateJWTString(usr.ID())
 	if err != nil {
 		h.log.Error("jwtauth.CreateJWTString", slog.Any("error", err))
 		httperr.HandleError(w, httperr.NewHTTPError(http.StatusInternalServerError, err))

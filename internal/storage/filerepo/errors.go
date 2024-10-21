@@ -3,6 +3,6 @@ package filerepo
 import "fmt"
 
 var (
-	ErrFileAlreadyExists = fmt.Errorf("file already exists")
-	ErrFileNotFound      = fmt.Errorf("file not found")
+	ErrSecretAlreadyExists = fmt.Errorf("secret entry already exists")
+	ErrSecretNotFound      = fmt.Errorf("secret entry not found")
 )
