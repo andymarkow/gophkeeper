@@ -29,11 +29,11 @@ func NewRouter(repo credrepo.Storage, cryptoKey []byte, opts ...RouterOpt) chi.R
 	r := chi.NewRouter()
 
 	return r.Group(func(r chi.Router) {
-		r.Post("/", h.CreateCredential)
-		r.Get("/", h.ListCredentials)
-		r.Get("/{credID}", h.GetCredential)
-		r.Put("/{credID}", h.UpdateCredential)
-		r.Delete("/{credID}", h.DeleteCredential)
+		r.Post("/", h.CreateSecret)
+		r.Get("/", h.ListSecrets)
+		r.Get("/{secretName}", h.GetSecret)
+		r.Put("/{secretName}", h.UpdateSecret)
+		r.Delete("/{secretName}", h.DeleteSecret)
 	})
 }
 

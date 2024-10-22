@@ -5,12 +5,15 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/google/uuid"
+
 	"github.com/andymarkow/gophkeeper/internal/cryptutils"
 )
 
-// Credential represents credentials.
-type Credential struct {
+// Secret represents credential secret.
+type Secret struct {
 	id        string
+	name      string
 	userID    string
 	metadata  map[string]string
 	createdAt time.Time
@@ -18,12 +21,13 @@ type Credential struct {
 	data      *Data
 }
 
-// Data represents credentials data.
+// Data represents credential secret data.
 type Data struct {
 	login    string
 	password string
 }
 
+// NewData creates a new data for the credential secret.
 func NewData(login, password string) (*Data, error) {
 	if login == "" {
 		return nil, fmt.Errorf("login must not be empty")
@@ -39,31 +43,36 @@ func NewData(login, password string) (*Data, error) {
 	}, nil
 }
 
-// NewEmptyData creates a new empty data.
+// NewEmptyData creates a new empty data for the credential secret.
 func NewEmptyData() *Data {
 	return &Data{}
 }
 
-func CreateCredential(id, userID string, metadata map[string]string, data *Data) (*Credential, error) {
-	return NewCredential(id, userID, metadata, time.Now(), time.Now(), data)
-}
-
-// NewCredential creates a new credential.
-func NewCredential(id, userID string, metadata map[string]string, createdAt, updatedAt time.Time, data *Data) (*Credential, error) {
+// NewSecret creates a new credential.
+func NewSecret(id, name, userID string, metadata map[string]string, createdAt, updatedAt time.Time, data *Data) (*Secret, error) {
 	if id == "" {
 		return nil, fmt.Errorf("id must not be empty")
+	}
+
+	if name == "" {
+		return nil, fmt.Errorf("name must not be empty")
 	}
 
 	if userID == "" {
 		return nil, fmt.Errorf("user id must not be empty")
 	}
 
+	if metadata == nil {
+		metadata = make(map[string]string)
+	}
+
 	if data == nil {
 		return nil, fmt.Errorf("data must not be empty")
 	}
 
-	return &Credential{
+	return &Secret{
 		id:        id,
+		name:      name,
 		userID:    userID,
 		metadata:  metadata,
 		createdAt: createdAt,
@@ -72,39 +81,58 @@ func NewCredential(id, userID string, metadata map[string]string, createdAt, upd
 	}, nil
 }
 
-// ID returns the id of the credential.
-func (c *Credential) ID() string {
-	return c.id
+// CreateSecret creates a new credential secret.
+func CreateSecret(name, userID string, metadata map[string]string, data *Data) (*Secret, error) {
+	if data == nil {
+		data = NewEmptyData()
+	}
+
+	return NewSecret(uuid.New().String(), name, userID, metadata, time.Now(), time.Now(), data)
 }
 
-// UserID returns the user login of the credential.
-func (c *Credential) UserID() string {
-	return c.userID
+// ID returns the id of the credential secret.
+func (s *Secret) ID() string {
+	return s.id
 }
 
-// Metadata returns the metadata of the credential.
-func (c *Credential) Metadata() map[string]string {
-	return c.metadata
+// Name returns the name of the credential secret.
+func (s *Secret) Name() string {
+	return s.name
 }
 
-// CreatedAt returns the create at of the credential.
-func (c *Credential) CreatedAt() time.Time {
-	return c.createdAt
+// UserID returns the user login of the credential secret.
+func (s *Secret) UserID() string {
+	return s.userID
 }
 
-// UpdatedAt returns the update at of the credential.
-func (c *Credential) UpdatedAt() time.Time {
-	return c.updatedAt
+// Metadata returns the metadata of the credential secret.
+func (s *Secret) Metadata() map[string]string {
+	return s.metadata
 }
 
-// SetData sets the data of the credential.
-func (c *Credential) SetData(data *Data) {
-	c.data = data
+// AddMetadata adds metadata to the credential secret.
+func (s *Secret) AddMetadata(metadata map[string]string) {
+	s.metadata = metadata
+}
+
+// CreatedAt returns the create at of the credential secret.
+func (s *Secret) CreatedAt() time.Time {
+	return s.createdAt
+}
+
+// UpdatedAt returns the update at of the credential secret.
+func (s *Secret) UpdatedAt() time.Time {
+	return s.updatedAt
 }
 
 // Data returns the data of the credential.
-func (c *Credential) Data() *Data {
-	return c.data
+func (s *Secret) Data() *Data {
+	return s.data
+}
+
+// SetData sets the data of the credential secret.
+func (s *Secret) SetData(data *Data) {
+	s.data = data
 }
 
 // Login returns the login of the credential.

@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net/http"
 	"sort"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 
@@ -49,8 +50,8 @@ func WithHandlersLogger(log *slog.Logger) HandlersOpt {
 	}
 }
 
-// CreateCredential handles create card request.
-func (h *Handlers) CreateCredential(w http.ResponseWriter, req *http.Request) {
+// CreateSecret handles create credential secret request.
+func (h *Handlers) CreateSecret(w http.ResponseWriter, req *http.Request) {
 	userID := req.Header.Get("X-User-Id")
 	if userID == "" {
 		httperr.HandleError(w, httperr.ErrUsrIDHeaderEmpty)
@@ -58,65 +59,74 @@ func (h *Handlers) CreateCredential(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	var payload CreateCredentialRequest
+	var payload CreateSecretRequest
 
 	if err := h.readBody(req.Body, &payload); err != nil {
 		httperr.HandleError(w, err)
 
 		return
 	}
-
 	defer req.Body.Close()
 
-	if err := h.processCreateCredentialRequest(req.Context(), userID, payload); err != nil {
-		httperr.HandleError(w, err)
+	resp, httpErr := h.processCreateSecretRequest(req.Context(), userID, payload)
+	if httpErr != nil {
+		httperr.HandleError(w, httpErr)
 
 		return
 	}
 
-	api.JSONResponse(w, http.StatusCreated, &CreateCredentialResponse{Message: "ok"})
+	api.JSONResponse(w, http.StatusCreated, resp)
 }
 
-// processCreateCredentialRequest processes create credential request.
-func (h *Handlers) processCreateCredentialRequest(ctx context.Context, userID string, payload CreateCredentialRequest) *httperr.HTTPError {
+// processCreateSecretRequest processes create credential secret request.
+func (h *Handlers) processCreateSecretRequest(ctx context.Context, userID string, payload CreateSecretRequest) (*Secret, *httperr.HTTPError) {
 	data, err := credential.NewData(payload.Data.Login, payload.Data.Password)
 	if err != nil {
 		h.log.Error("failed to create credentials data", slog.Any("error", err))
 
-		return httperr.NewHTTPError(http.StatusBadRequest, err)
+		return nil, httperr.NewHTTPError(http.StatusBadRequest, err)
 	}
 
 	encData, err := data.Encrypt(h.cryptoKey)
 	if err != nil {
 		h.log.Error("failed to encrypt credentials data", slog.Any("error", err))
 
-		return httperr.NewHTTPError(http.StatusInternalServerError, err)
+		return nil, httperr.NewHTTPError(http.StatusInternalServerError, err)
 	}
 
-	cred, err := credential.CreateCredential(payload.ID, userID, payload.Metadata, encData)
+	cred, err := credential.CreateSecret(payload.Name, userID, payload.Metadata, encData)
 	if err != nil {
 		h.log.Error("failed to create credentials", slog.Any("error", err))
 
-		return httperr.NewHTTPError(http.StatusBadRequest, err)
+		return nil, httperr.NewHTTPError(http.StatusBadRequest, err)
 	}
 
-	if err := h.storage.AddCredential(ctx, cred); err != nil {
-		if errors.Is(err, credrepo.ErrCredAlreadyExists) {
-			h.log.Error("failed to add credentials to storage", slog.Any("error", err))
-
-			return httperr.NewHTTPError(http.StatusConflict, err)
+	secret, err := h.storage.AddSecret(ctx, cred)
+	if err != nil {
+		if errors.Is(err, credrepo.ErrSecretAlreadyExists) {
+			return nil, httperr.NewHTTPError(http.StatusConflict, err)
 		}
 
 		h.log.Error("failed to add credentials to storage", slog.Any("error", err))
 
-		return httperr.NewHTTPError(http.StatusInternalServerError, err)
+		return nil, httperr.NewHTTPError(http.StatusInternalServerError, err)
 	}
 
-	return nil
+	return &Secret{
+		ID:        secret.ID(),
+		Name:      secret.Name(),
+		Metadata:  secret.Metadata(),
+		CreatedAt: secret.CreatedAt(),
+		UpdatedAt: secret.UpdatedAt(),
+		Data: &Data{
+			Login:    data.Login(),
+			Password: data.Password(),
+		},
+	}, nil
 }
 
-// ListCredentials handles list credentials request.
-func (h *Handlers) ListCredentials(w http.ResponseWriter, req *http.Request) {
+// ListSecrets handles list credential secrets request.
+func (h *Handlers) ListSecrets(w http.ResponseWriter, req *http.Request) {
 	userID := req.Header.Get("X-User-Id")
 	if userID == "" {
 		httperr.HandleError(w, httperr.ErrUsrIDHeaderEmpty)
@@ -124,7 +134,7 @@ func (h *Handlers) ListCredentials(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	resp, err := h.processListCredentialsRequest(req.Context(), userID)
+	resp, err := h.processListSecretsRequest(req.Context(), userID)
 	if err != nil {
 		httperr.HandleError(w, err)
 
@@ -134,38 +144,38 @@ func (h *Handlers) ListCredentials(w http.ResponseWriter, req *http.Request) {
 	api.JSONResponse(w, http.StatusOK, resp)
 }
 
-// processListCredentialsRequest processes list credentials request.
-func (h *Handlers) processListCredentialsRequest(ctx context.Context, userID string) (*ListCredentialsResponse, *httperr.HTTPError) {
-	creds, err := h.storage.ListCredentials(ctx, userID)
+// processListSecretsRequest processes list credential secrets request.
+func (h *Handlers) processListSecretsRequest(ctx context.Context, userID string) (*ListSecretsResponse, *httperr.HTTPError) {
+	secrets, err := h.storage.ListSecrets(ctx, userID)
 	if err != nil {
-		h.log.Error("failed to list credentials", slog.Any("error", err))
+		h.log.Error("failed to list credential secrets", slog.Any("error", err))
 
 		return nil, httperr.NewHTTPError(http.StatusInternalServerError, err)
 	}
 
-	if creds == nil {
-		return &ListCredentialsResponse{Creds: []*Credential{}}, nil
+	resp := &ListSecretsResponse{
+		Secrets: make([]*Secret, 0, len(secrets)),
 	}
 
-	crds := make([]*Credential, 0, len(creds))
-
-	for _, cred := range creds {
-		crds = append(crds, &Credential{
-			ID:        cred.ID(),
-			Metadata:  cred.Metadata(),
-			CreatedAt: cred.CreatedAt(),
-			UpdatedAt: cred.UpdatedAt(),
+	for _, secret := range secrets {
+		resp.Secrets = append(resp.Secrets, &Secret{
+			ID:        secret.ID(),
+			Name:      secret.Name(),
+			Metadata:  secret.Metadata(),
+			CreatedAt: secret.CreatedAt(),
+			UpdatedAt: secret.UpdatedAt(),
 		})
 	}
 
-	sort.Slice(crds, func(i, j int) bool {
-		return crds[i].ID < crds[j].ID
+	sort.Slice(resp.Secrets, func(i, j int) bool {
+		return resp.Secrets[i].ID < resp.Secrets[j].ID
 	})
 
-	return &ListCredentialsResponse{Creds: crds}, nil
+	return resp, nil
 }
 
-func (h *Handlers) GetCredential(w http.ResponseWriter, req *http.Request) {
+// GetSecret handles get credential secret request.
+func (h *Handlers) GetSecret(w http.ResponseWriter, req *http.Request) {
 	userID := req.Header.Get("X-User-Id")
 	if userID == "" {
 		httperr.HandleError(w, httperr.ErrUsrIDHeaderEmpty)
@@ -173,14 +183,14 @@ func (h *Handlers) GetCredential(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	credID := chi.URLParam(req, "credID")
-	if credID == "" {
-		httperr.HandleError(w, ErrCredIDEmpty)
+	secretName := chi.URLParam(req, "secretName")
+	if secretName == "" {
+		httperr.HandleError(w, ErrSecretNameEmpty)
 
 		return
 	}
 
-	resp, err := h.processGetCredentialRequest(req.Context(), userID, credID)
+	resp, err := h.processGetSecretRequest(req.Context(), userID, secretName)
 	if err != nil {
 		httperr.HandleError(w, err)
 
@@ -190,19 +200,19 @@ func (h *Handlers) GetCredential(w http.ResponseWriter, req *http.Request) {
 	api.JSONResponse(w, http.StatusOK, resp)
 }
 
-func (h *Handlers) processGetCredentialRequest(ctx context.Context, userID, credID string) (*GetCredentialResponse, *httperr.HTTPError) {
-	cred, err := h.storage.GetCredential(ctx, userID, credID)
+func (h *Handlers) processGetSecretRequest(ctx context.Context, userID, secretName string) (*Secret, *httperr.HTTPError) {
+	secret, err := h.storage.GetSecret(ctx, userID, secretName)
 	if err != nil {
-		if errors.Is(err, credrepo.ErrCredNotFound) {
+		if errors.Is(err, credrepo.ErrSecretNotFound) {
 			return nil, httperr.NewHTTPError(http.StatusNotFound, err)
 		}
 
-		h.log.Error("failed to get credentials from storage", slog.Any("error", err))
+		h.log.Error("failed to get credential secret from storage", slog.Any("error", err))
 
 		return nil, httperr.NewHTTPError(http.StatusInternalServerError, err)
 	}
 
-	decData, err := cred.Data().Decrypt(h.cryptoKey)
+	decData, err := secret.Data().Decrypt(h.cryptoKey)
 	if err != nil {
 		h.log.Error("failed to decrypt credentials data", slog.Any("error", err))
 
@@ -210,24 +220,23 @@ func (h *Handlers) processGetCredentialRequest(ctx context.Context, userID, cred
 	}
 
 	// Set decrypted data.
-	cred.SetData(decData)
+	secret.SetData(decData)
 
-	return &GetCredentialResponse{
-		Credential: Credential{
-			ID:        cred.ID(),
-			Metadata:  cred.Metadata(),
-			CreatedAt: cred.CreatedAt(),
-			UpdatedAt: cred.UpdatedAt(),
-			Data: &Data{
-				Login:    cred.Data().Login(),
-				Password: cred.Data().Password(),
-			},
+	return &Secret{
+		ID:        secret.ID(),
+		Name:      secret.Name(),
+		Metadata:  secret.Metadata(),
+		CreatedAt: secret.CreatedAt(),
+		UpdatedAt: secret.UpdatedAt(),
+		Data: &Data{
+			Login:    secret.Data().Login(),
+			Password: secret.Data().Password(),
 		},
 	}, nil
 }
 
-// UpdateCredential handles update credentials request.
-func (h *Handlers) UpdateCredential(w http.ResponseWriter, req *http.Request) {
+// UpdateSecret handles update credential secret request.
+func (h *Handlers) UpdateSecret(w http.ResponseWriter, req *http.Request) {
 	userID := req.Header.Get("X-User-Id")
 	if userID == "" {
 		httperr.HandleError(w, httperr.ErrUsrIDHeaderEmpty)
@@ -235,14 +244,14 @@ func (h *Handlers) UpdateCredential(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	credID := chi.URLParam(req, "credID")
-	if credID == "" {
-		httperr.HandleError(w, ErrCredIDEmpty)
+	secretName := chi.URLParam(req, "secretName")
+	if secretName == "" {
+		httperr.HandleError(w, ErrSecretNameEmpty)
 
 		return
 	}
 
-	var payload UpdateCredentialRequest
+	var payload UpdateSecretRequest
 
 	if err := h.readBody(req.Body, &payload); err != nil {
 		httperr.HandleError(w, err)
@@ -252,52 +261,85 @@ func (h *Handlers) UpdateCredential(w http.ResponseWriter, req *http.Request) {
 
 	defer req.Body.Close()
 
-	if err := h.processUpdateCredentialRequest(req.Context(), userID, credID, &payload); err != nil {
-		httperr.HandleError(w, err)
+	resp, httpErr := h.processUpdateSecretRequest(req.Context(), userID, secretName, payload)
+	if httpErr != nil {
+		httperr.HandleError(w, httpErr)
 
 		return
 	}
 
-	api.JSONResponse(w, http.StatusNoContent, nil)
+	api.JSONResponse(w, http.StatusAccepted, resp)
 }
 
-func (h *Handlers) processUpdateCredentialRequest(ctx context.Context, userID, credID string, payload *UpdateCredentialRequest) *httperr.HTTPError {
+func (h *Handlers) processUpdateSecretRequest(ctx context.Context, userID, secretName string, payload UpdateSecretRequest) (*Secret, *httperr.HTTPError) {
+	currSecret, err := h.storage.GetSecret(ctx, userID, secretName)
+	if err != nil {
+		if errors.Is(err, credrepo.ErrSecretNotFound) {
+			return nil, httperr.NewHTTPError(http.StatusNotFound, err)
+		}
+
+		h.log.Error("failed to get credential secret entry from storage", slog.Any("error", err))
+
+		return nil, httperr.NewHTTPError(http.StatusInternalServerError, err)
+	}
+
 	data, err := credential.NewData(payload.Data.Login, payload.Data.Password)
 	if err != nil {
-		h.log.Error("failed to read credentials data", slog.Any("error", err))
+		h.log.Error("failed to create credential secret data", slog.Any("error", err))
 
-		return httperr.NewHTTPError(http.StatusBadRequest, err)
+		return nil, httperr.NewHTTPError(http.StatusBadRequest, err)
 	}
 
 	encData, err := data.Encrypt(h.cryptoKey)
 	if err != nil {
-		h.log.Error("failed to encrypt credentials data", slog.Any("error", err))
+		h.log.Error("failed to encrypt credential secret data", slog.Any("error", err))
 
-		return httperr.NewHTTPError(http.StatusInternalServerError, err)
+		return nil, httperr.NewHTTPError(http.StatusInternalServerError, err)
 	}
 
-	cred, err := credential.CreateCredential(credID, userID, payload.Metadata, encData)
+	currSecret.AddMetadata(payload.Metadata)
+
+	secretObj, err := credential.NewSecret(
+		currSecret.ID(), secretName, userID, currSecret.Metadata(), currSecret.CreatedAt(), time.Now(), encData)
 	if err != nil {
-		h.log.Error("failed to create credentials", slog.Any("error", err))
+		h.log.Error("failed to create credential secret", slog.Any("error", err))
 
-		return httperr.NewHTTPError(http.StatusBadRequest, err)
+		return nil, httperr.NewHTTPError(http.StatusBadRequest, err)
 	}
 
-	if err := h.storage.UpdateCredential(ctx, cred); err != nil {
-		if errors.Is(err, credrepo.ErrCredNotFound) {
-			return httperr.NewHTTPError(http.StatusNotFound, err)
+	secret, err := h.storage.UpdateSecret(ctx, secretObj)
+	if err != nil {
+		if errors.Is(err, credrepo.ErrSecretNotFound) {
+			return nil, httperr.NewHTTPError(http.StatusNotFound, err)
 		}
 
-		h.log.Error("failed to update credentials", slog.Any("error", err))
+		h.log.Error("failed to update credential secret", slog.Any("error", err))
 
-		return httperr.NewHTTPError(http.StatusInternalServerError, err)
+		return nil, httperr.NewHTTPError(http.StatusInternalServerError, err)
 	}
 
-	return nil
+	decData, err := secret.Data().Decrypt(h.cryptoKey)
+	if err != nil {
+		h.log.Error("failed to decrypt credential secret data", slog.Any("error", err))
+
+		return nil, httperr.NewHTTPError(http.StatusInternalServerError, err)
+	}
+
+	return &Secret{
+		ID:        secret.ID(),
+		Name:      secret.Name(),
+		Metadata:  secret.Metadata(),
+		CreatedAt: secret.CreatedAt(),
+		UpdatedAt: secret.UpdatedAt(),
+		Data: &Data{
+			Login:    decData.Login(),
+			Password: decData.Password(),
+		},
+	}, nil
 }
 
-// DeleteCredential handles delete credentials request.
-func (h *Handlers) DeleteCredential(w http.ResponseWriter, req *http.Request) {
+// DeleteSecret handles delete credential secret request.
+func (h *Handlers) DeleteSecret(w http.ResponseWriter, req *http.Request) {
 	userID := req.Header.Get("X-User-Id")
 	if userID == "" {
 		httperr.HandleError(w, httperr.ErrUsrIDHeaderEmpty)
@@ -305,16 +347,16 @@ func (h *Handlers) DeleteCredential(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	credID := chi.URLParam(req, "credID")
-	if credID == "" {
-		httperr.HandleError(w, ErrCredIDEmpty)
+	secretName := chi.URLParam(req, "secretName")
+	if secretName == "" {
+		httperr.HandleError(w, ErrSecretNameEmpty)
 
 		return
 	}
 
-	err := h.processDeleteCredentialRequest(req.Context(), userID, credID)
-	if err != nil {
-		httperr.HandleError(w, err)
+	httpErr := h.processDeleteSecretRequest(req.Context(), userID, secretName)
+	if httpErr != nil {
+		httperr.HandleError(w, httpErr)
 
 		return
 	}
@@ -322,14 +364,14 @@ func (h *Handlers) DeleteCredential(w http.ResponseWriter, req *http.Request) {
 	api.JSONResponse(w, http.StatusNoContent, nil)
 }
 
-// processDeleteCredentialRequest processes delete credentials request.
-func (h *Handlers) processDeleteCredentialRequest(ctx context.Context, userID, credID string) *httperr.HTTPError {
-	if err := h.storage.DeleteCredential(ctx, userID, credID); err != nil {
-		if errors.Is(err, credrepo.ErrCredNotFound) {
+// processDeleteSecretRequest processes delete credential secret request.
+func (h *Handlers) processDeleteSecretRequest(ctx context.Context, userID, secretName string) *httperr.HTTPError {
+	if err := h.storage.DeleteSecret(ctx, userID, secretName); err != nil {
+		if errors.Is(err, credrepo.ErrSecretNotFound) {
 			return httperr.NewHTTPError(http.StatusNotFound, err)
 		}
 
-		h.log.Error("failed to remove credentials from storage", slog.Any("error", err))
+		h.log.Error("failed to delete credential secret from storage", slog.Any("error", err))
 
 		return httperr.NewHTTPError(http.StatusInternalServerError, err)
 	}

@@ -2,12 +2,15 @@ package credentials
 
 import "time"
 
-// Credential represents credentials.
+// Secret represents a credential secret.
 //
 //nolint:tagliatelle
-type Credential struct {
+type Secret struct {
 	// ID represents credential id.
 	ID string `json:"id"`
+
+	// Name represents credential name.
+	Name string `json:"name"`
 
 	// Metadata represents credential metadata.
 	Metadata map[string]string `json:"metadata,omitempty"`
@@ -22,7 +25,7 @@ type Credential struct {
 	Data *Data `json:"data,omitempty"`
 }
 
-// Data represents credentials data.
+// Data represents credentials secret data.
 type Data struct {
 	// Login represents credential login.
 	Login string `json:"login"`
@@ -31,27 +34,22 @@ type Data struct {
 	Password string `json:"password"`
 }
 
-// CreateCredentialRequest represents a request to create a new credential.
-type CreateCredentialRequest struct {
-	*Credential
+// CreateSecretRequest represents a request to create a new credential.
+type CreateSecretRequest struct {
+	Secret
 }
 
-// CreateCredentialResponse represents a response to create a new credential.
-type CreateCredentialResponse struct {
-	Message string `json:"message"`
+// ListSecretsResponse represents a response to list credentials.
+type ListSecretsResponse struct {
+	Secrets []*Secret `json:"secrets"`
 }
 
-// ListCredentialsResponse represents a response to list credentials.
-type ListCredentialsResponse struct {
-	Creds []*Credential `json:"credentials"`
+// GetSecretResponse represents a response to get credential.
+type GetSecretResponse struct {
+	*Secret
 }
 
-// GetCredentialResponse represents a response to get credential.
-type GetCredentialResponse struct {
-	Credential
-}
-
-// UpdateCredentialRequest represents update bank card request.
-type UpdateCredentialRequest struct {
-	Credential
+// UpdateSecretRequest represents update bank card request.
+type UpdateSecretRequest struct {
+	Secret
 }

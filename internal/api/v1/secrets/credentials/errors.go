@@ -8,5 +8,5 @@ import (
 )
 
 var (
-	ErrCredIDEmpty = httperr.NewHTTPError(http.StatusBadRequest, errors.New("credential ID is empty"))
+	ErrSecretNameEmpty = httperr.NewHTTPError(http.StatusBadRequest, errors.New("secret name is empty"))
 )

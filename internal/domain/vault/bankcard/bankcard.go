@@ -76,15 +76,6 @@ func NewEmptyData() *Data {
 	return &Data{}
 }
 
-// CreateSecret creates a new bank card.
-func CreateSecret(name, userID string, metadata map[string]string, data *Data) (*Secret, error) {
-	if data == nil {
-		data = NewEmptyData()
-	}
-
-	return NewSecret(uuid.New().String(), name, userID, metadata, time.Now(), time.Now(), data)
-}
-
 // NewSecret creates a new bank card.
 func NewSecret(id, name, userID string, metadata map[string]string, createdAt, updatedAt time.Time, data *Data) (*Secret, error) {
 	if id == "" {
@@ -116,6 +107,15 @@ func NewSecret(id, name, userID string, metadata map[string]string, createdAt, u
 		updatedAt: updatedAt,
 		data:      data,
 	}, nil
+}
+
+// CreateSecret creates a new bank card.
+func CreateSecret(name, userID string, metadata map[string]string, data *Data) (*Secret, error) {
+	if data == nil {
+		data = NewEmptyData()
+	}
+
+	return NewSecret(uuid.New().String(), name, userID, metadata, time.Now(), time.Now(), data)
 }
 
 // ID returns the id of the bank card secret.

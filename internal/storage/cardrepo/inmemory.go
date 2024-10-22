@@ -26,11 +26,11 @@ func NewInMemory() *InMemory {
 }
 
 // AddSecret adds a new bank card secret entry to the storage.
-func (s *InMemory) AddSecret(_ context.Context, secret *bankcard.Secret) error {
+func (s *InMemory) AddSecret(_ context.Context, secret *bankcard.Secret) (*bankcard.Secret, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	// Check if the user login entry exists in the storage.
+	// Check if the user id entry exists in the storage.
 	secrets, ok := s.secrets[secret.UserID()]
 	if !ok {
 		// Check if cards entry is nil.
@@ -39,21 +39,25 @@ func (s *InMemory) AddSecret(_ context.Context, secret *bankcard.Secret) error {
 			s.secrets[secret.UserID()] = make(map[string]bankcard.Secret)
 		}
 
-		// UserID does not exist in the storage. Add user login and bank card to the storage.
+		// UserID does not exist in the storage. Add user id and bank card to the storage.
 		s.secrets[secret.UserID()][secret.Name()] = *secret
 
-		return nil
+		secr := s.secrets[secret.UserID()][secret.Name()]
+
+		return &secr, nil
 	}
 
 	if _, ok := secrets[secret.Name()]; ok {
 		// Bank card already exists in the storage.
-		return fmt.Errorf("%w: %s", ErrSecretAlreadyExists, secret.Name())
+		return nil, fmt.Errorf("%w: %s", ErrSecretAlreadyExists, secret.Name())
 	}
 
 	// Add bank card to the storage.
 	s.secrets[secret.UserID()][secret.Name()] = *secret
 
-	return nil
+	secr := s.secrets[secret.UserID()][secret.Name()]
+
+	return &secr, nil
 }
 
 // GetSecret returns a bank card secret entry from the storage.
@@ -61,10 +65,10 @@ func (s *InMemory) GetSecret(_ context.Context, userID, secretName string) (*ban
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	// Check if the user login entry exists in the storage.
+	// Check if the user id entry exists in the storage.
 	secrets, ok := s.secrets[userID]
 	if !ok {
-		return nil, fmt.Errorf("%w for user login %s: %s", ErrSecretNotFound, userID, secretName)
+		return nil, fmt.Errorf("%w for user id %s: %s", ErrSecretNotFound, userID, secretName)
 	}
 
 	// Check if the bank card secret entry exists in the storage.
@@ -74,7 +78,7 @@ func (s *InMemory) GetSecret(_ context.Context, userID, secretName string) (*ban
 		return &crd, nil
 	}
 
-	return nil, fmt.Errorf("%w for user login %s: %s", ErrSecretNotFound, userID, secretName)
+	return nil, fmt.Errorf("%w for user id %s: %s", ErrSecretNotFound, userID, secretName)
 }
 
 // ListSecrets returns a list of bank card secret entries from the storage.

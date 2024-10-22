@@ -101,10 +101,9 @@ func (h *Handlers) processCreateSecretRequest(ctx context.Context, userID string
 		return nil, httperr.NewHTTPError(http.StatusBadRequest, err)
 	}
 
-	if err := h.storage.AddSecret(ctx, secret); err != nil {
+	secr, err := h.storage.AddSecret(ctx, secret)
+	if err != nil {
 		if errors.Is(err, cardrepo.ErrSecretAlreadyExists) {
-			h.log.Error("failed to add bank card secret to storage", slog.Any("error", err))
-
 			return nil, httperr.NewHTTPError(http.StatusConflict, err)
 		}
 
@@ -114,11 +113,11 @@ func (h *Handlers) processCreateSecretRequest(ctx context.Context, userID string
 	}
 
 	return &Secret{
-		ID:        secret.ID(),
-		Name:      secret.Name(),
-		Metadata:  secret.Metadata(),
-		CreatedAt: secret.CreatedAt(),
-		UpdatedAt: secret.UpdatedAt(),
+		ID:        secr.ID(),
+		Name:      secr.Name(),
+		Metadata:  secr.Metadata(),
+		CreatedAt: secr.CreatedAt(),
+		UpdatedAt: secr.UpdatedAt(),
 		Data: &Data{
 			Number:   data.Number(),
 			Name:     data.Name(),
@@ -179,6 +178,7 @@ func (h *Handlers) processGetSecretRequest(ctx context.Context, userID, secretNa
 
 	return &Secret{
 		ID:        secret.ID(),
+		Name:      secret.Name(),
 		Metadata:  secret.Metadata(),
 		CreatedAt: secret.CreatedAt(),
 		UpdatedAt: secret.UpdatedAt(),
@@ -219,14 +219,12 @@ func (h *Handlers) processListSecretsRequest(ctx context.Context, userID string)
 		return nil, httperr.NewHTTPError(http.StatusInternalServerError, err)
 	}
 
-	if secrets == nil {
-		return &ListSecretsResponse{Secrets: []*Secret{}}, nil
+	resp := &ListSecretsResponse{
+		Secrets: make([]*Secret, 0, len(secrets)),
 	}
 
-	secretsList := make([]*Secret, 0, len(secrets))
-
 	for _, secret := range secrets {
-		secretsList = append(secretsList, &Secret{
+		resp.Secrets = append(resp.Secrets, &Secret{
 			ID:        secret.ID(),
 			Name:      secret.Name(),
 			Metadata:  secret.Metadata(),
@@ -235,11 +233,11 @@ func (h *Handlers) processListSecretsRequest(ctx context.Context, userID string)
 		})
 	}
 
-	sort.Slice(secretsList, func(i, j int) bool {
-		return secretsList[i].ID < secretsList[j].ID
+	sort.Slice(resp.Secrets, func(i, j int) bool {
+		return resp.Secrets[i].ID < resp.Secrets[j].ID
 	})
 
-	return &ListSecretsResponse{Secrets: secretsList}, nil
+	return resp, nil
 }
 
 // UpdateSecret handles update bank card secret request.
@@ -283,8 +281,6 @@ func (h *Handlers) processUpdateSecretRequest(ctx context.Context, userID, secre
 	currSecret, err := h.storage.GetSecret(ctx, userID, secretName)
 	if err != nil {
 		if errors.Is(err, cardrepo.ErrSecretNotFound) {
-			h.log.Error("failed to get bank card secret entry from storage", slog.Any("error", err))
-
 			return nil, httperr.NewHTTPError(http.StatusNotFound, err)
 		}
 

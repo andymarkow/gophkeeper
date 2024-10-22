@@ -8,10 +8,12 @@ import (
 	"github.com/andymarkow/gophkeeper/internal/domain/vault/credential"
 )
 
+var _ Storage = (*InMemory)(nil)
+
 // InMemory represents in-memory credentials storage.
 type InMemory struct {
-	// UserID -> Login -> Credential.
-	creds map[string]map[string]credential.Credential
+	// UserID -> SecretName -> Secret.
+	secrets map[string]map[string]credential.Secret
 
 	mu sync.RWMutex
 }
@@ -19,121 +21,128 @@ type InMemory struct {
 // NewInMemory creates new in-memory credentials storage.
 func NewInMemory() *InMemory {
 	return &InMemory{
-		creds: make(map[string]map[string]credential.Credential),
+		secrets: make(map[string]map[string]credential.Secret),
 	}
 }
 
-// AddCredential adds a new credential to the storage.
-func (s *InMemory) AddCredential(_ context.Context, cred *credential.Credential) error {
+// AddSecret adds a new credential secret entry to the storage.
+func (s *InMemory) AddSecret(_ context.Context, secret *credential.Secret) (*credential.Secret, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	// Check if the user login entry exists in the storage.
-	creds, ok := s.creds[cred.UserID()]
+	// Check if the user id entry exists in the storage.
+	secrets, ok := s.secrets[secret.UserID()]
 	if !ok {
-		// Check if creds entry is nil.
-		if creds == nil {
-			// Initialize creds entry.
-			s.creds[cred.UserID()] = make(map[string]credential.Credential)
+		// Check if secrets entry is nil.
+		if secrets == nil {
+			// Initialize secrets entry.
+			s.secrets[secret.UserID()] = make(map[string]credential.Secret)
 		}
 
 		// UserID does not exist in the storage. Add user login and credential to the storage.
-		s.creds[cred.UserID()][cred.ID()] = *cred
+		s.secrets[secret.UserID()][secret.Name()] = *secret
 
-		return nil
+		secr := s.secrets[secret.UserID()][secret.Name()]
+
+		return &secr, nil
 	}
 
-	if _, ok := creds[cred.ID()]; ok {
-		// Credential already exists in the storage.
-		return fmt.Errorf("%w: %s", ErrCredAlreadyExists, cred.ID())
+	if _, ok := secrets[secret.Name()]; ok {
+		// Credential secret entry already exists in the storage.
+		return nil, fmt.Errorf("%w: %s", ErrSecretAlreadyExists, secret.Name())
 	}
 
-	// Add credential to the storage.
-	s.creds[cred.UserID()][cred.ID()] = *cred
+	// Add credential secret entry to the storage.
+	s.secrets[secret.UserID()][secret.Name()] = *secret
 
-	return nil
+	secr := s.secrets[secret.UserID()][secret.Name()]
+
+	return &secr, nil
 }
 
-// GetCredential returns a credential from the storage.
-func (s *InMemory) GetCredential(_ context.Context, userLogin, credID string) (*credential.Credential, error) {
+// GetSecret returns a credential from the storage.
+func (s *InMemory) GetSecret(_ context.Context, userID, secretName string) (*credential.Secret, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	// Check if the user login entry exists in the storage.
-	creds, ok := s.creds[userLogin]
+	// Check if the user id entry exists in the storage.
+	secrets, ok := s.secrets[userID]
 	if !ok {
-		return nil, fmt.Errorf("%w for user login %s: %s", ErrCredNotFound, userLogin, credID)
+		return nil, fmt.Errorf("%w for user id %s: %s", ErrSecretNotFound, userID, secretName)
 	}
 
 	// Check if the credential entry exists in the storage.
-	if cred, ok := creds[credID]; ok {
-		crd := cred
+	if secret, ok := secrets[secretName]; ok {
+		secr := secret
 
-		return &crd, nil
+		return &secr, nil
 	}
 
-	return nil, fmt.Errorf("%w for user login %s: %s", ErrCredNotFound, userLogin, credID)
+	return nil, fmt.Errorf("%w for user id %s: %s", ErrSecretNotFound, userID, secretName)
 }
 
-func (s *InMemory) ListCredentials(_ context.Context, userLogin string) ([]*credential.Credential, error) {
+// ListSecrets returns a list of credential secret entries from the storage.
+func (s *InMemory) ListSecrets(_ context.Context, userID string) ([]*credential.Secret, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	// Check if the user login entry exists in the storage.
-	creds, ok := s.creds[userLogin]
+	// Check if the user id entry exists in the storage.
+	secrets, ok := s.secrets[userID]
 	if !ok {
-		return []*credential.Credential{}, nil
+		return []*credential.Secret{}, nil
 	}
 
-	credsList := make([]*credential.Credential, 0, len(creds))
+	secretsList := make([]*credential.Secret, 0, len(secrets))
 
-	for _, cred := range creds {
-		cr := cred
-		credsList = append(credsList, &cr)
+	for _, secret := range secrets {
+		secr := secret
+		secretsList = append(secretsList, &secr)
 	}
 
-	return credsList, nil
+	return secretsList, nil
 }
 
-// UpdateCredential updates a credential in the storage.
-func (s *InMemory) UpdateCredential(_ context.Context, cred *credential.Credential) error {
+// UpdateSecret updates a credential secret entry in the storage.
+func (s *InMemory) UpdateSecret(_ context.Context, secret *credential.Secret) (*credential.Secret, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	// Check if the user login entry exists in the storage.
-	creds, ok := s.creds[cred.UserID()]
+	// Check if the user id entry exists in the storage.
+	secrets, ok := s.secrets[secret.UserID()]
 	if !ok {
-		return fmt.Errorf("%w for user login %s: %s", ErrCredNotFound, cred.UserID(), cred.ID())
+		return nil, fmt.Errorf("%w for user id %s: %s", ErrSecretNotFound, secret.UserID(), secret.Name())
 	}
 
-	// Check if the credential entry exists in the storage.
-	if _, ok := creds[cred.ID()]; !ok {
-		return fmt.Errorf("%w for user login %s: %s", ErrCredNotFound, cred.UserID(), cred.ID())
+	// Check if the credential secret entry exists in the storage.
+	if _, ok := secrets[secret.Name()]; !ok {
+		return nil, fmt.Errorf("%w for user id %s: %s", ErrSecretNotFound, secret.UserID(), secret.Name())
 	}
 
-	// Update credential in the storage.
-	s.creds[cred.UserID()][cred.ID()] = *cred
+	// Update credential secret entry in the storage.
+	s.secrets[secret.UserID()][secret.Name()] = *secret
 
-	return nil
+	secr := s.secrets[secret.UserID()][secret.Name()]
+
+	return &secr, nil
 }
 
-// DeleteCredential removes a credential from the storage.
-func (s *InMemory) DeleteCredential(_ context.Context, userLogin string, credID string) error {
+// DeleteSecret deletes a credential secret entry from the storage.
+func (s *InMemory) DeleteSecret(_ context.Context, userID string, secretName string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	// Check if the user login entry exists in the storage.
-	creds, ok := s.creds[userLogin]
+	// Check if the user id entry exists in the storage.
+	secrets, ok := s.secrets[userID]
 	if !ok {
-		return fmt.Errorf("%w for user login %s: %s", ErrCredNotFound, userLogin, credID)
+		return fmt.Errorf("%w for user id %s: %s", ErrSecretNotFound, userID, secretName)
 	}
 
-	if _, ok := creds[credID]; !ok {
-		return fmt.Errorf("%w for user login %s: %s", ErrCredNotFound, userLogin, credID)
+	if _, ok := secrets[secretName]; !ok {
+		return fmt.Errorf("%w for user id %s: %s", ErrSecretNotFound, userID, secretName)
 	}
 
-	// Delete credential from the storage.
-	delete(s.creds[userLogin], credID)
+	// Delete credential secret entry from the storage.
+	delete(s.secrets[userID], secretName)
 
 	return nil
 }
