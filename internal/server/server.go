@@ -19,11 +19,15 @@ import (
 	"github.com/andymarkow/gophkeeper/internal/services/textsvc"
 	"github.com/andymarkow/gophkeeper/internal/slogger"
 	"github.com/andymarkow/gophkeeper/internal/storage/cardrepo"
+	"github.com/andymarkow/gophkeeper/internal/storage/cardrepo/cardinmem"
+	"github.com/andymarkow/gophkeeper/internal/storage/cardrepo/cardpg"
 	"github.com/andymarkow/gophkeeper/internal/storage/credrepo"
 	"github.com/andymarkow/gophkeeper/internal/storage/filerepo"
 	"github.com/andymarkow/gophkeeper/internal/storage/objrepo"
 	"github.com/andymarkow/gophkeeper/internal/storage/textrepo"
 	"github.com/andymarkow/gophkeeper/internal/storage/userrepo"
+	"github.com/andymarkow/gophkeeper/internal/storage/userrepo/userinmem"
+	"github.com/andymarkow/gophkeeper/internal/storage/userrepo/userpg"
 )
 
 type Server struct {
@@ -73,9 +77,19 @@ func NewServer() (*Server, error) {
 		filesvc.WithObjectBasePath("files"),
 	)
 
+	userStorage, err := createUserRepo(context.Background(), cfg.Database.DSN, logger)
+	if err != nil {
+		return nil, fmt.Errorf("failed to init user storage: %w", err)
+	}
+
+	cardStorage, err := createCardRepo(context.Background(), cfg.Database.DSN, logger)
+	if err != nil {
+		return nil, fmt.Errorf("failed to init card storage: %w", err)
+	}
+
 	router := router.NewRouter(
-		userrepo.NewInMemory(),
-		cardrepo.NewInMemory(),
+		userStorage,
+		cardStorage,
 		credrepo.NewInMemory(),
 		textSvc,
 		fileSvc,
@@ -124,4 +138,38 @@ func (s *Server) Run() error {
 	}
 
 	return nil
+}
+
+func createUserRepo(ctx context.Context, connStr string, logger *slog.Logger) (userrepo.Storage, error) {
+	if connStr == "" {
+		return userinmem.NewInMemory(), nil
+	}
+
+	repo, err := userpg.NewStorage(connStr, userpg.WithLogger(logger))
+	if err != nil {
+		return nil, fmt.Errorf("userpg.NewStorage: %w", err)
+	}
+
+	if err := repo.Bootstrap(ctx); err != nil {
+		return nil, fmt.Errorf("database.Bootstrap: %w", err)
+	}
+
+	return repo, nil
+}
+
+func createCardRepo(ctx context.Context, connStr string, logger *slog.Logger) (cardrepo.Storage, error) {
+	if connStr == "" {
+		return cardinmem.NewInMemory(), nil
+	}
+
+	repo, err := cardpg.NewStorage(connStr, cardpg.WithLogger(logger))
+	if err != nil {
+		return nil, fmt.Errorf("cardpg.NewStorage: %w", err)
+	}
+
+	if err := repo.Bootstrap(ctx); err != nil {
+		return nil, fmt.Errorf("database.Bootstrap: %w", err)
+	}
+
+	return repo, nil
 }

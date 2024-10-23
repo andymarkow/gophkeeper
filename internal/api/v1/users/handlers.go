@@ -78,7 +78,6 @@ func (h *Handlers) CreateUser(w http.ResponseWriter, req *http.Request) {
 
 	if err := h.storage.AddUser(req.Context(), usr); err != nil {
 		if errors.Is(err, userrepo.ErrUsrAlreadyExists) {
-			h.log.Error("storage.CreateUser", slog.Any("error", err))
 			httperr.HandleError(w, ErrUsrAlreadyExists)
 
 			return
@@ -124,7 +123,6 @@ func (h *Handlers) LoginUser(w http.ResponseWriter, req *http.Request) {
 	usr, err := h.storage.GetUser(req.Context(), payload.Login)
 	if err != nil {
 		if errors.Is(err, userrepo.ErrUsrNotFound) {
-			h.log.Error("storage.GetUser", slog.Any("error", err))
 			httperr.HandleError(w, ErrUsrNotFound)
 
 			return

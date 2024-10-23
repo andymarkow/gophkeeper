@@ -61,10 +61,10 @@ func (s *InMemory) GetSecret(_ context.Context, userID, secretName string) (*tex
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	// Check if the user login entry exists in the storage.
+	// Check if the user id entry exists in the storage.
 	secrets, ok := s.secrets[userID]
 	if !ok {
-		return nil, fmt.Errorf("%w for user login %s: %s", ErrSecretEntryNotFound, userID, secretName)
+		return nil, fmt.Errorf("%w for user id %s: %s", ErrSecretEntryNotFound, userID, secretName)
 	}
 
 	// Check if the secret entry exists in the storage.
@@ -74,7 +74,7 @@ func (s *InMemory) GetSecret(_ context.Context, userID, secretName string) (*tex
 		return &sec, nil
 	}
 
-	return nil, fmt.Errorf("%w for user login %s: %s", ErrSecretEntryNotFound, userID, secretName)
+	return nil, fmt.Errorf("%w for user id %s: %s", ErrSecretEntryNotFound, userID, secretName)
 }
 
 // ListSecrets returns a list of secret entries from the storage.
@@ -99,15 +99,15 @@ func (s *InMemory) UpdateSecret(_ context.Context, secret *text.Secret) (*text.S
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	// Check if the user login entry exists in the storage.
+	// Check if the user id entry exists in the storage.
 	secrets, ok := s.secrets[secret.UserID()]
 	if !ok {
-		return nil, fmt.Errorf("%w for user login %s: %s", ErrSecretEntryNotFound, secret.UserID(), secret.Name())
+		return nil, fmt.Errorf("%w for user id %s: %s", ErrSecretEntryNotFound, secret.UserID(), secret.Name())
 	}
 
 	// Check if the text data entry exists in the storage.
 	if _, ok := secrets[secret.Name()]; !ok {
-		return nil, fmt.Errorf("%w for user login %s: %s", ErrSecretEntryNotFound, secret.UserID(), secret.Name())
+		return nil, fmt.Errorf("%w for user id %s: %s", ErrSecretEntryNotFound, secret.UserID(), secret.Name())
 	}
 
 	// Update secret entry in the storage.
@@ -123,15 +123,15 @@ func (s *InMemory) DeleteSecret(_ context.Context, userID, secretName string) er
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	// Check if the user login entry exists in the storage.
+	// Check if the user id entry exists in the storage.
 	secrets, ok := s.secrets[userID]
 	if !ok {
-		return fmt.Errorf("%w for user login %s: %s", ErrSecretEntryNotFound, userID, secretName)
+		return fmt.Errorf("%w for user id %s: %s", ErrSecretEntryNotFound, userID, secretName)
 	}
 
 	// Check if the secret entry exists in the storage.
 	if _, ok := secrets[secretName]; !ok {
-		return fmt.Errorf("%w for user login %s: %s", ErrSecretEntryNotFound, userID, secretName)
+		return fmt.Errorf("%w for user id %s: %s", ErrSecretEntryNotFound, userID, secretName)
 	}
 
 	// Delete secret entry from the storage.

@@ -1,4 +1,5 @@
-package userrepo
+// Package userinmem provides in-memory storage implementation for user model.
+package userinmem
 
 import (
 	"context"
@@ -6,9 +7,10 @@ import (
 	"sync"
 
 	"github.com/andymarkow/gophkeeper/internal/domain/user"
+	"github.com/andymarkow/gophkeeper/internal/storage/userrepo"
 )
 
-var _ Storage = (*InMemory)(nil)
+var _ userrepo.Storage = (*InMemory)(nil)
 
 // InMemory represents in-memory user storage.
 type InMemory struct {
@@ -30,7 +32,7 @@ func (s *InMemory) AddUser(_ context.Context, usr *user.User) error {
 	defer s.mu.Unlock()
 
 	if _, ok := s.users[usr.Login()]; ok {
-		return fmt.Errorf("%w: %s", ErrUsrAlreadyExists, usr.Login())
+		return fmt.Errorf("%w: %s", userrepo.ErrUsrAlreadyExists, usr.Login())
 	}
 
 	s.users[usr.Login()] = usr
@@ -47,19 +49,5 @@ func (s *InMemory) GetUser(_ context.Context, login string) (*user.User, error) 
 		return usr, nil
 	}
 
-	return nil, fmt.Errorf("%w: %s", ErrUsrNotFound, login)
-}
-
-// UpdateUser updates a user in the storage.
-func (s *InMemory) UpdateUser(_ context.Context, usr *user.User) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	if _, ok := s.users[usr.Login()]; !ok {
-		return fmt.Errorf("%w: %s", ErrUsrNotFound, usr.Login())
-	}
-
-	s.users[usr.Login()] = usr
-
-	return nil
+	return nil, fmt.Errorf("%w: %s", userrepo.ErrUsrNotFound, login)
 }

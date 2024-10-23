@@ -2,6 +2,7 @@
 package bankcard
 
 import (
+	"encoding/json"
 	"fmt"
 	"strconv"
 	"time"
@@ -24,13 +25,13 @@ type Secret struct {
 
 // Data represents bank card secret data.
 type Data struct {
-	number   string
-	name     string
-	cvv      string
-	expireAt string
+	number    string
+	name      string
+	cvv       string
+	expiredAt string
 }
 
-func CreateData(number, name, cvv, expireAt string) (*Data, error) {
+func CreateData(number, name, cvv, expiredAt string) (*Data, error) {
 	if number == "" {
 		return nil, fmt.Errorf("card number must not be empty")
 	}
@@ -39,14 +40,14 @@ func CreateData(number, name, cvv, expireAt string) (*Data, error) {
 		return nil, fmt.Errorf("invalid card cvv: %w", err)
 	}
 
-	if err := validateCardExpireAt(expireAt); err != nil {
+	if err := validateCardExpireAt(expiredAt); err != nil {
 		return nil, fmt.Errorf("invalid card expiration date: %w", err)
 	}
 
-	return NewData(number, name, cvv, expireAt)
+	return NewData(number, name, cvv, expiredAt)
 }
 
-func NewData(number, name, cvv, expireAt string) (*Data, error) {
+func NewData(number, name, cvv, expiredAt string) (*Data, error) {
 	if number == "" {
 		return nil, fmt.Errorf("card number must not be empty")
 	}
@@ -59,15 +60,15 @@ func NewData(number, name, cvv, expireAt string) (*Data, error) {
 		return nil, fmt.Errorf("card cvv value must not be empty")
 	}
 
-	if expireAt == "" {
+	if expiredAt == "" {
 		return nil, fmt.Errorf("card expiration date must not be empty")
 	}
 
 	return &Data{
-		number:   number,
-		name:     name,
-		cvv:      cvv,
-		expireAt: expireAt,
+		number:    number,
+		name:      name,
+		cvv:       cvv,
+		expiredAt: expiredAt,
 	}, nil
 }
 
@@ -145,6 +146,20 @@ func (s *Secret) AddMetadata(metadata map[string]string) {
 	}
 }
 
+// MetadataJSON returns the metadata of the bank card secret.
+func (s *Secret) MetadataJSON() ([]byte, error) {
+	if s.metadata == nil {
+		return nil, nil
+	}
+
+	metadata, err := json.Marshal(s.metadata)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal metadata: %w", err)
+	}
+
+	return metadata, nil
+}
+
 // CreatedAt returns the create at of the bank card secret.
 func (s *Secret) CreatedAt() time.Time {
 	return s.createdAt
@@ -165,6 +180,27 @@ func (s *Secret) SetData(data *Data) {
 	s.data = data
 }
 
+// DataJSON returns the data of the bank card secret.
+func (s *Secret) DataJSON() ([]byte, error) {
+	if s.data == nil {
+		return nil, nil
+	}
+
+	dataMap := map[string]string{
+		"number":     s.data.number,
+		"name":       s.data.name,
+		"cvv":        s.data.cvv,
+		"expired_at": s.data.expiredAt,
+	}
+
+	data, err := json.Marshal(dataMap)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal data: %w", err)
+	}
+
+	return data, nil
+}
+
 // Number returns the number of the bank card secret.
 func (d *Data) Number() string {
 	return d.number
@@ -182,7 +218,7 @@ func (d *Data) CVV() string {
 
 // ExpireAt returns the expire at of the bank card.
 func (d *Data) ExpireAt() string {
-	return d.expireAt
+	return d.expiredAt
 }
 
 // Encrypt encrypts bank card data with the given key.
@@ -202,16 +238,16 @@ func (d *Data) Encrypt(key []byte) (*Data, error) {
 		return nil, fmt.Errorf("failed to encrypt card cvv value: %w", err)
 	}
 
-	expireAt, err := cryptutils.EncryptString(key, d.expireAt)
+	expiredAt, err := cryptutils.EncryptString(key, d.expiredAt)
 	if err != nil {
 		return nil, fmt.Errorf("failed to encrypt card expire at date: %w", err)
 	}
 
 	return &Data{
-		number:   number,
-		name:     name,
-		cvv:      cvv,
-		expireAt: expireAt,
+		number:    number,
+		name:      name,
+		cvv:       cvv,
+		expiredAt: expiredAt,
 	}, nil
 }
 
@@ -232,16 +268,16 @@ func (d *Data) Decrypt(key []byte) (*Data, error) {
 		return nil, fmt.Errorf("failed to decrypt card cvv value: %w", err)
 	}
 
-	expireAt, err := cryptutils.DecryptString(key, d.expireAt)
+	expiredAt, err := cryptutils.DecryptString(key, d.expiredAt)
 	if err != nil {
 		return nil, fmt.Errorf("failed to decrypt card expire at date: %w", err)
 	}
 
 	return &Data{
-		number:   number,
-		name:     name,
-		cvv:      cvv,
-		expireAt: expireAt,
+		number:    number,
+		name:      name,
+		cvv:       cvv,
+		expiredAt: expiredAt,
 	}, nil
 }
 
@@ -259,11 +295,27 @@ func validateCardCvv(cvv string) error {
 }
 
 // validateCardExpireAt checks the card expiration date is valid.
-func validateCardExpireAt(expireAt string) error {
-	_, err := time.Parse(time.RFC3339, expireAt)
+func validateCardExpireAt(expiredAt string) error {
+	_, err := time.Parse(time.RFC3339, expiredAt)
 	if err != nil {
 		return fmt.Errorf("cant parse date as RFC3339 format")
 	}
 
 	return nil
+}
+
+// UnmarshalData unmarshals bank card data.
+func UnmarshalData(data []byte) (*Data, error) {
+	var d map[string]string
+
+	if err := json.Unmarshal(data, &d); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal data: %w", err)
+	}
+
+	dat, err := NewData(d["number"], d["name"], d["cvv"], d["expired_at"])
+	if err != nil {
+		return nil, fmt.Errorf("failed to create data: %w", err)
+	}
+
+	return dat, nil
 }

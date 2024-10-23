@@ -1,4 +1,5 @@
-package cardrepo
+// Package cardinmem implements in-memory bank cards storage.
+package cardinmem
 
 import (
 	"context"
@@ -6,9 +7,10 @@ import (
 	"sync"
 
 	"github.com/andymarkow/gophkeeper/internal/domain/vault/bankcard"
+	"github.com/andymarkow/gophkeeper/internal/storage/cardrepo"
 )
 
-var _ Storage = (*InMemory)(nil)
+var _ cardrepo.Storage = (*InMemory)(nil)
 
 // InMemory represents in-memory bank cards storage.
 type InMemory struct {
@@ -49,7 +51,7 @@ func (s *InMemory) AddSecret(_ context.Context, secret *bankcard.Secret) (*bankc
 
 	if _, ok := secrets[secret.Name()]; ok {
 		// Bank card already exists in the storage.
-		return nil, fmt.Errorf("%w: %s", ErrSecretAlreadyExists, secret.Name())
+		return nil, fmt.Errorf("%w: %s", cardrepo.ErrSecretAlreadyExists, secret.Name())
 	}
 
 	// Add bank card to the storage.
@@ -68,7 +70,7 @@ func (s *InMemory) GetSecret(_ context.Context, userID, secretName string) (*ban
 	// Check if the user id entry exists in the storage.
 	secrets, ok := s.secrets[userID]
 	if !ok {
-		return nil, fmt.Errorf("%w for user id %s: %s", ErrSecretNotFound, userID, secretName)
+		return nil, fmt.Errorf("%w for user id %s: %s", cardrepo.ErrSecretNotFound, userID, secretName)
 	}
 
 	// Check if the bank card secret entry exists in the storage.
@@ -78,7 +80,7 @@ func (s *InMemory) GetSecret(_ context.Context, userID, secretName string) (*ban
 		return &crd, nil
 	}
 
-	return nil, fmt.Errorf("%w for user id %s: %s", ErrSecretNotFound, userID, secretName)
+	return nil, fmt.Errorf("%w for user id %s: %s", cardrepo.ErrSecretNotFound, userID, secretName)
 }
 
 // ListSecrets returns a list of bank card secret entries from the storage.
@@ -107,14 +109,14 @@ func (s *InMemory) UpdateSecret(_ context.Context, secret *bankcard.Secret) (*ba
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	// Check if the user login entry exists in the storage.
+	// Check if the user id entry exists in the storage.
 	secrets, ok := s.secrets[secret.UserID()]
 	if !ok {
-		return nil, fmt.Errorf("%w for user login %s: %s", ErrSecretNotFound, secret.UserID(), secret.Name())
+		return nil, fmt.Errorf("%w for user id %s: %s", cardrepo.ErrSecretNotFound, secret.UserID(), secret.Name())
 	}
 
 	if _, ok := secrets[secret.Name()]; !ok {
-		return nil, fmt.Errorf("%w for user login %s: %s", ErrSecretNotFound, secret.UserID(), secret.Name())
+		return nil, fmt.Errorf("%w for user id %s: %s", cardrepo.ErrSecretNotFound, secret.UserID(), secret.Name())
 	}
 
 	// Update bank card secret entry in the storage.
@@ -130,14 +132,14 @@ func (s *InMemory) DeleteSecret(_ context.Context, userID, secretName string) er
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	// Check if the user login entry exists in the storage.
+	// Check if the user id entry exists in the storage.
 	secrets, ok := s.secrets[userID]
 	if !ok {
-		return fmt.Errorf("%w for user login %s: %s", ErrSecretNotFound, userID, secretName)
+		return fmt.Errorf("%w for user id %s: %s", cardrepo.ErrSecretNotFound, userID, secretName)
 	}
 
 	if _, ok := secrets[secretName]; !ok {
-		return fmt.Errorf("%w for user login %s: %s", ErrSecretNotFound, userID, secretName)
+		return fmt.Errorf("%w for user id %s: %s", cardrepo.ErrSecretNotFound, userID, secretName)
 	}
 
 	// Delete bank card secret entry from the storage.

@@ -13,10 +13,15 @@ type Config struct {
 	LogLevel   string
 	JWTSecret  string
 	CryptoKey  string
-	ObjStorage *objectStorage
+	ObjStorage *ObjectStorage
+	Database   *Database
 }
 
-type objectStorage struct {
+type Database struct {
+	DSN string
+}
+
+type ObjectStorage struct {
 	Endpoint  string
 	AccessKey string
 	SecretKey string
@@ -34,7 +39,10 @@ func NewConfig() (*Config, error) {
 		LogLevel:   viper.GetString("log-level"),
 		JWTSecret:  viper.GetString("jwt-secret"),
 		CryptoKey:  viper.GetString("crypto-key"),
-		ObjStorage: &objectStorage{
+		Database: &Database{
+			DSN: viper.GetString("db-dsn"),
+		},
+		ObjStorage: &ObjectStorage{
 			Endpoint:  viper.GetString("s3-endpoint"),
 			AccessKey: viper.GetString("s3-access-key"),
 			SecretKey: viper.GetString("s3-secret-key"),
@@ -52,6 +60,7 @@ func initConfig() error {
 	pflag.StringP("log-level", "l", "", "log level")
 	pflag.String("jwt-secret", "", "JWT secret used for token generation and verification")
 	pflag.String("crypto-key", "", "crypto key used for data encryption and decryption")
+	pflag.String("db-dsn", "", "PostgreSQL database connection DSN")
 	pflag.String("s3-endpoint", "", "S3 object storage endpoint")
 	pflag.String("s3-access-key", "", "S3 object storage access key")
 	pflag.String("s3-secret-key", "", "S3 object storage secret key")
@@ -115,6 +124,10 @@ func bindEnvs() error {
 	}
 
 	if err := viper.BindEnv("crypto-key", "KEEPER_CRYPTO_KEY"); err != nil {
+		return fmt.Errorf("viper.BindEnv: %w", err)
+	}
+
+	if err := viper.BindEnv("db-dsn", "KEEPER_DATABASE_DSN"); err != nil {
 		return fmt.Errorf("viper.BindEnv: %w", err)
 	}
 

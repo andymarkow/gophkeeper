@@ -10,6 +10,5 @@ import (
 // Storage represents user storage interface.
 type Storage interface {
 	AddUser(ctx context.Context, usr *user.User) error
-	UpdateUser(ctx context.Context, usr *user.User) error
 	GetUser(ctx context.Context, login string) (*user.User, error)
 }

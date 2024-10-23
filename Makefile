@@ -9,6 +9,7 @@
 LOG_LEVEL=debug
 KEEPER_S3_ACCESS_KEY=minioadmin
 KEEPER_S3_SECRET_KEY=minioadmin
+KEEPER_DATABASE_DSN=postgres://postgres:postgres@localhost:5432/postgres?sslmode=disable
 
 .PHONY: all
 all: fmt tidy vet test lint
@@ -49,18 +50,28 @@ coverage:
 run-server:
 	go run ./cmd/server
 
-.PHONY: run-postgres
-run-postgres:
-	docker-compose up -d postgres pgadmin
+.PHONY: postgres-start
+postgres-start:
+	docker-compose up -d postgres
 
-.PHONY: stop-postgres
-stop-postgres:
-	docker-compose down postgres pgadmin
+.PHONY: postgres-stop
+postgres-stop:
+	docker-compose down postgres
 
-.PHONY: run-minio
-run-minio:
+.PHONY: minio-start
+minio-start:
 	docker-compose up -d minio
 
-.PHONY: stop-minio
-stop-minio:	
+.PHONY: minio-stop
+minio-stop:	
 	docker-compose down minio
+
+.PHONY: start-all
+start-all: postgres-start minio-start
+
+.PHONY: stop-all
+stop-all: postgres-stop minio-stop
+
+.PHONY: clean
+clean:
+	docker system prune -f
