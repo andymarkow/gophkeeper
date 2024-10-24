@@ -1,4 +1,5 @@
-package credrepo
+// Package credinmem implements in-memory credentials storage.
+package credinmem
 
 import (
 	"context"
@@ -6,9 +7,10 @@ import (
 	"sync"
 
 	"github.com/andymarkow/gophkeeper/internal/domain/vault/credential"
+	"github.com/andymarkow/gophkeeper/internal/storage/credrepo"
 )
 
-var _ Storage = (*InMemory)(nil)
+var _ credrepo.Storage = (*InMemory)(nil)
 
 // InMemory represents in-memory credentials storage.
 type InMemory struct {
@@ -23,6 +25,11 @@ func NewInMemory() *InMemory {
 	return &InMemory{
 		secrets: make(map[string]map[string]credential.Secret),
 	}
+}
+
+// Close closes the storage.
+func (s *InMemory) Close() error {
+	return nil
 }
 
 // AddSecret adds a new credential secret entry to the storage.
@@ -49,7 +56,7 @@ func (s *InMemory) AddSecret(_ context.Context, secret *credential.Secret) (*cre
 
 	if _, ok := secrets[secret.Name()]; ok {
 		// Credential secret entry already exists in the storage.
-		return nil, fmt.Errorf("%w: %s", ErrSecretAlreadyExists, secret.Name())
+		return nil, fmt.Errorf("%w: %s", credrepo.ErrSecretAlreadyExists, secret.Name())
 	}
 
 	// Add credential secret entry to the storage.
@@ -68,7 +75,7 @@ func (s *InMemory) GetSecret(_ context.Context, userID, secretName string) (*cre
 	// Check if the user id entry exists in the storage.
 	secrets, ok := s.secrets[userID]
 	if !ok {
-		return nil, fmt.Errorf("%w for user id %s: %s", ErrSecretNotFound, userID, secretName)
+		return nil, fmt.Errorf("%w for user id %s: %s", credrepo.ErrSecretNotFound, userID, secretName)
 	}
 
 	// Check if the credential entry exists in the storage.
@@ -78,7 +85,7 @@ func (s *InMemory) GetSecret(_ context.Context, userID, secretName string) (*cre
 		return &secr, nil
 	}
 
-	return nil, fmt.Errorf("%w for user id %s: %s", ErrSecretNotFound, userID, secretName)
+	return nil, fmt.Errorf("%w for user id %s: %s", credrepo.ErrSecretNotFound, userID, secretName)
 }
 
 // ListSecrets returns a list of credential secret entries from the storage.
@@ -110,12 +117,12 @@ func (s *InMemory) UpdateSecret(_ context.Context, secret *credential.Secret) (*
 	// Check if the user id entry exists in the storage.
 	secrets, ok := s.secrets[secret.UserID()]
 	if !ok {
-		return nil, fmt.Errorf("%w for user id %s: %s", ErrSecretNotFound, secret.UserID(), secret.Name())
+		return nil, fmt.Errorf("%w for user id %s: %s", credrepo.ErrSecretNotFound, secret.UserID(), secret.Name())
 	}
 
 	// Check if the credential secret entry exists in the storage.
 	if _, ok := secrets[secret.Name()]; !ok {
-		return nil, fmt.Errorf("%w for user id %s: %s", ErrSecretNotFound, secret.UserID(), secret.Name())
+		return nil, fmt.Errorf("%w for user id %s: %s", credrepo.ErrSecretNotFound, secret.UserID(), secret.Name())
 	}
 
 	// Update credential secret entry in the storage.
@@ -134,11 +141,11 @@ func (s *InMemory) DeleteSecret(_ context.Context, userID string, secretName str
 	// Check if the user id entry exists in the storage.
 	secrets, ok := s.secrets[userID]
 	if !ok {
-		return fmt.Errorf("%w for user id %s: %s", ErrSecretNotFound, userID, secretName)
+		return fmt.Errorf("%w for user id %s: %s", credrepo.ErrSecretNotFound, userID, secretName)
 	}
 
 	if _, ok := secrets[secretName]; !ok {
-		return fmt.Errorf("%w for user id %s: %s", ErrSecretNotFound, userID, secretName)
+		return fmt.Errorf("%w for user id %s: %s", credrepo.ErrSecretNotFound, userID, secretName)
 	}
 
 	// Delete credential secret entry from the storage.

@@ -4,7 +4,6 @@ package userpg
 import (
 	"context"
 	"database/sql"
-	"embed"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -12,7 +11,6 @@ import (
 
 	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5/pgconn"
-	"github.com/pressly/goose/v3"
 
 	// Postgres driver.
 	_ "github.com/jackc/pgx/v5/stdlib"
@@ -21,9 +19,6 @@ import (
 	"github.com/andymarkow/gophkeeper/internal/pgutils"
 	"github.com/andymarkow/gophkeeper/internal/storage/userrepo"
 )
-
-//go:embed migrations/*.sql
-var embedMigrations embed.FS
 
 // Storage implements storage.
 type Storage struct {
@@ -103,21 +98,6 @@ func WithConnMaxLifetime(lifetime time.Duration) Option {
 	return func(c *config) {
 		c.connMaxLifetime = lifetime
 	}
-}
-
-// Bootstrap runs migrations.
-func (s *Storage) Bootstrap(ctx context.Context) error {
-	goose.SetBaseFS(embedMigrations)
-
-	if err := goose.SetDialect(string(goose.DialectPostgres)); err != nil {
-		return fmt.Errorf("failed to set dialect: %w", err)
-	}
-
-	if err := goose.UpContext(ctx, s.db, "migrations"); err != nil {
-		return fmt.Errorf("failed to apply migrations: %w", err)
-	}
-
-	return nil
 }
 
 // Close closes the underlying database connection.

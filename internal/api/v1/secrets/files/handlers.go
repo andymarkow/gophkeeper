@@ -78,9 +78,9 @@ func (h *Handlers) CreateSecret(w http.ResponseWriter, req *http.Request) {
 // processCreateSecretRequest processes create file request.
 func (h *Handlers) processCreateSecretRequest(ctx context.Context, userID, secretName string, metadata map[string]string,
 ) (*CreateSecretResponse, *httperr.HTTPError) {
-	secret, err := h.filesvc.CreateFile(ctx, userID, secretName, metadata)
+	secret, err := h.filesvc.CreateSecret(ctx, userID, secretName, metadata)
 	if err != nil {
-		if errors.Is(err, filesvc.ErrFileEntryAlreadyExists) {
+		if errors.Is(err, filesvc.ErrSecretEntryAlreadyExists) {
 			return nil, httperr.NewHTTPError(http.StatusConflict, err)
 		}
 
@@ -143,8 +143,12 @@ func (h *Handlers) UpdateSecret(w http.ResponseWriter, req *http.Request) {
 // processUpdateSecretRequest processes update file request.
 func (h *Handlers) processUpdateSecretRequest(ctx context.Context, userID, secretName, fileName string,
 	metadata map[string]string) (*UpdateSecretResponse, *httperr.HTTPError) {
-	secret, err := h.filesvc.UpdateFile(ctx, userID, secretName, fileName, metadata)
+	secret, err := h.filesvc.UpdateSecret(ctx, userID, secretName, fileName, metadata)
 	if err != nil {
+		if errors.Is(err, filesvc.ErrSecretEntryNotFound) {
+			return nil, httperr.NewHTTPError(http.StatusNotFound, err)
+		}
+
 		h.log.Error("failed to update file entry", slog.Any("error", err))
 
 		return nil, httperr.NewHTTPError(http.StatusBadRequest, err)
@@ -185,9 +189,9 @@ func (h *Handlers) ListSecrets(w http.ResponseWriter, req *http.Request) {
 	api.JSONResponse(w, http.StatusOK, resp)
 }
 
-// processListFilesRequest processes list files request.
+// processListSecretsRequest processes list files request.
 func (h *Handlers) processListSecretsRequest(ctx context.Context, userID string) (*ListSecretsResponse, *httperr.HTTPError) {
-	secrets, err := h.filesvc.ListFiles(ctx, userID)
+	secrets, err := h.filesvc.ListSecrets(ctx, userID)
 	if err != nil {
 		h.log.Error("failed to list files", slog.Any("error", err))
 
@@ -248,9 +252,9 @@ func (h *Handlers) GetSecret(w http.ResponseWriter, req *http.Request) {
 
 // processGetSecretRequest processes get file request.
 func (h *Handlers) processGetSecretRequest(ctx context.Context, userID, secretName string) (*Secret, *httperr.HTTPError) {
-	secret, err := h.filesvc.GetFile(ctx, userID, secretName)
+	secret, err := h.filesvc.GetSecret(ctx, userID, secretName)
 	if err != nil {
-		if errors.Is(err, filesvc.ErrFileEntryNotFound) {
+		if errors.Is(err, filesvc.ErrSecretEntryNotFound) {
 			return nil, httperr.NewHTTPError(http.StatusNotFound, err)
 		}
 
@@ -311,12 +315,16 @@ func (h *Handlers) UploadSecret(w http.ResponseWriter, req *http.Request) {
 func (h *Handlers) processUploadSecretRequest(ctx context.Context, userID, secretName string,
 	file multipart.File, fileHeader *multipart.FileHeader,
 ) (*Secret, *httperr.HTTPError) {
-	secret, err := h.filesvc.UploadFile(ctx, userID, secretName, filesvc.UploadFileRequest{
+	secret, err := h.filesvc.UploadSecret(ctx, userID, secretName, filesvc.UploadSecretRequest{
 		FileName: fileHeader.Filename,
 		Size:     -1, // Must be set explicitly to '-1'.
 		Data:     file,
 	})
 	if err != nil {
+		if errors.Is(err, filesvc.ErrSecretEntryNotFound) {
+			return nil, httperr.NewHTTPError(http.StatusNotFound, err)
+		}
+
 		h.log.Error("failed to upload file secret content", slog.Any("error", err))
 
 		return nil, httperr.NewHTTPError(http.StatusBadRequest, err)
@@ -373,9 +381,9 @@ func (h *Handlers) DownloadSecret(w http.ResponseWriter, req *http.Request) {
 // processDownloadSecretContentRequest processes download file request.
 func (h *Handlers) processDownloadSecretContentRequest(ctx context.Context, userID, secretName string,
 ) (string, io.ReadCloser, *httperr.HTTPError) {
-	secret, rd, err := h.filesvc.DownloadFile(ctx, userID, secretName)
+	secret, rd, err := h.filesvc.DownloadSecret(ctx, userID, secretName)
 	if err != nil {
-		if errors.Is(err, filesvc.ErrFileEntryNotFound) {
+		if errors.Is(err, filesvc.ErrSecretEntryNotFound) {
 			return "", nil, httperr.NewHTTPError(http.StatusNotFound, err)
 		}
 
@@ -415,9 +423,9 @@ func (h *Handlers) DeleteSecret(w http.ResponseWriter, req *http.Request) {
 
 // processDeleteSecretRequest processes delete the secret request.
 func (h *Handlers) processDeleteSecretRequest(ctx context.Context, userID, secretName string) *httperr.HTTPError {
-	err := h.filesvc.DeleteFile(ctx, userID, secretName)
+	err := h.filesvc.DeleteSecret(ctx, userID, secretName)
 	if err != nil {
-		if errors.Is(err, filesvc.ErrFileEntryNotFound) {
+		if errors.Is(err, filesvc.ErrSecretEntryNotFound) {
 			return httperr.NewHTTPError(http.StatusNotFound, err)
 		}
 

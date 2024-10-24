@@ -31,10 +31,6 @@ type ContentInfo struct {
 
 // NewContentInfo creates a new file info object.
 func NewContentInfo(fileName, location, checksum, salt, iv string, size int64) (*ContentInfo, error) {
-	if fileName == "" {
-		return nil, fmt.Errorf("file name must not be empty")
-	}
-
 	return &ContentInfo{
 		fileName: fileName,
 		location: location,

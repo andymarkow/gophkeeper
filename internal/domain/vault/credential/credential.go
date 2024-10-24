@@ -2,6 +2,7 @@
 package credential
 
 import (
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -115,6 +116,20 @@ func (s *Secret) AddMetadata(metadata map[string]string) {
 	s.metadata = metadata
 }
 
+// MetadataJSON returns the metadata of the bank card secret.
+func (s *Secret) MetadataJSON() ([]byte, error) {
+	if s.metadata == nil {
+		return nil, nil
+	}
+
+	metadata, err := json.Marshal(s.metadata)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal metadata: %w", err)
+	}
+
+	return metadata, nil
+}
+
 // CreatedAt returns the create at of the credential secret.
 func (s *Secret) CreatedAt() time.Time {
 	return s.createdAt
@@ -133,6 +148,25 @@ func (s *Secret) Data() *Data {
 // SetData sets the data of the credential secret.
 func (s *Secret) SetData(data *Data) {
 	s.data = data
+}
+
+// DataJSON returns the data of the bank card secret.
+func (s *Secret) DataJSON() ([]byte, error) {
+	if s.data == nil {
+		return nil, nil
+	}
+
+	dataMap := map[string]string{
+		"login":    s.data.login,
+		"password": s.data.password,
+	}
+
+	data, err := json.Marshal(dataMap)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal data: %w", err)
+	}
+
+	return data, nil
 }
 
 // Login returns the login of the credential.
@@ -179,4 +213,20 @@ func (d *Data) Decrypt(key []byte) (*Data, error) {
 		login:    login,
 		password: password,
 	}, nil
+}
+
+// UnmarshalData unmarshals credential data.
+func UnmarshalData(data []byte) (*Data, error) {
+	var d map[string]string
+
+	if err := json.Unmarshal(data, &d); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal data: %w", err)
+	}
+
+	dat, err := NewData(d["login"], d["password"])
+	if err != nil {
+		return nil, fmt.Errorf("failed to create data: %w", err)
+	}
+
+	return dat, nil
 }

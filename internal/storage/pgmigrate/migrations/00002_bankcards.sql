@@ -1,5 +1,5 @@
 -- +goose Up
-CREATE TABLE bankcards (
+CREATE TABLE vault_bankcards (
     id UUID PRIMARY KEY,
     name VARCHAR(255) NOT NULL,
     user_id UUID NOT NULL,
@@ -9,9 +9,9 @@ CREATE TABLE bankcards (
     data JSONB NOT NULL DEFAULT '{}'::jsonb
 );
 
-CREATE UNIQUE INDEX idx_unique_user_id_name ON bankcards (user_id, name);
+CREATE UNIQUE INDEX vault_bankcards_user_id_name_idx ON vault_bankcards (user_id, name);
 
 
 -- +goose Down
-DROP INDEX idx_unique_user_id_name;
-DROP TABLE bankcards;
+DROP INDEX vault_bankcards_user_id_name_idx;
+DROP TABLE vault_bankcards;

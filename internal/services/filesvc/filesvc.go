@@ -66,8 +66,17 @@ func WithObjectBasePath(path string) Option {
 	}
 }
 
-// CreateFile creates a new file entry in the file storage.
-func (s *FileService) CreateFile(ctx context.Context, userID, secretName string, metadata map[string]string) (*file.Secret, error) {
+// Close closes the service.
+func (s *FileService) Close() error {
+	if err := s.dbStorage.Close(); err != nil {
+		return fmt.Errorf("storage.Close: %w", err)
+	}
+
+	return nil
+}
+
+// CreateSecret creates a new file entry in the file storage.
+func (s *FileService) CreateSecret(ctx context.Context, userID, secretName string, metadata map[string]string) (*file.Secret, error) {
 	// Create new file object entry to store it in the file storage.
 	secret, err := file.CreateSecret(secretName, userID, metadata)
 	if err != nil {
@@ -78,26 +87,26 @@ func (s *FileService) CreateFile(ctx context.Context, userID, secretName string,
 	secretEntry, err := s.dbStorage.AddSecret(ctx, secret)
 	if err != nil {
 		if errors.Is(err, filerepo.ErrSecretAlreadyExists) {
-			return nil, ErrFileEntryAlreadyExists
+			return nil, ErrSecretEntryAlreadyExists
 		}
 
-		return nil, fmt.Errorf("storage.AddFile: %w", err)
+		return nil, fmt.Errorf("storage.AddSecret: %w", err)
 	}
 
 	return secretEntry, nil
 }
 
-// UpdateFile updates the file metadata.
-func (s *FileService) UpdateFile(ctx context.Context, userID, secretName, fileName string,
+// UpdateSecret updates the file metadata.
+func (s *FileService) UpdateSecret(ctx context.Context, userID, secretName, fileName string,
 	metadata map[string]string) (*file.Secret, error) {
 	// Get the file object entry from the file storage.
 	secret, err := s.dbStorage.GetSecret(ctx, userID, secretName)
 	if err != nil {
 		if errors.Is(err, filerepo.ErrSecretNotFound) {
-			return nil, ErrFileEntryNotFound
+			return nil, ErrSecretEntryNotFound
 		}
 
-		return nil, fmt.Errorf("storage.GetFile: %w", err)
+		return nil, fmt.Errorf("storage.GetSecret: %w", err)
 	}
 
 	if metadata != nil {
@@ -119,24 +128,24 @@ func (s *FileService) UpdateFile(ctx context.Context, userID, secretName, fileNa
 	return f, nil
 }
 
-// UploadFileRequest represents a request for uploading a file.
-type UploadFileRequest struct {
+// UploadSecretRequest represents a request for uploading a file.
+type UploadSecretRequest struct {
 	FileName string
 	Size     int64
 	Data     io.Reader
 }
 
-// UploadFile uploads a file content to the object storage.
-func (s *FileService) UploadFile(ctx context.Context, userID, secretName string, req UploadFileRequest) (*file.Secret, error) {
+// UploadSecret uploads a file content to the object storage.
+func (s *FileService) UploadSecret(ctx context.Context, userID, secretName string, req UploadSecretRequest) (*file.Secret, error) {
 	// Get the file object entry from the file storage.
 	// This must exists before the file data is uploaded to the object storage.
 	secret, err := s.dbStorage.GetSecret(ctx, userID, secretName)
 	if err != nil {
 		if errors.Is(err, filerepo.ErrSecretNotFound) {
-			return nil, ErrFileEntryNotFound
+			return nil, ErrSecretEntryNotFound
 		}
 
-		return nil, fmt.Errorf("storage.GetFile: %w", err)
+		return nil, fmt.Errorf("storage.GetSecret: %w", err)
 	}
 
 	rd, hash := cryptutils.CalcStreamHash(req.Data)
@@ -175,8 +184,8 @@ func (s *FileService) UploadFile(ctx context.Context, userID, secretName string,
 	return updFile, nil
 }
 
-// ListFiles returns a list of files for the user.
-func (s *FileService) ListFiles(ctx context.Context, userID string) ([]*file.Secret, error) {
+// ListSecrets returns a list of files for the user.
+func (s *FileService) ListSecrets(ctx context.Context, userID string) ([]*file.Secret, error) {
 	files, err := s.dbStorage.ListSecrets(ctx, userID)
 	if err != nil {
 		return nil, fmt.Errorf("storage.ListSecrets: %w", err)
@@ -185,12 +194,12 @@ func (s *FileService) ListFiles(ctx context.Context, userID string) ([]*file.Sec
 	return files, nil
 }
 
-// GetFile returns a file for the user.
-func (s *FileService) GetFile(ctx context.Context, userID, secretName string) (*file.Secret, error) {
+// GetSecret returns a file for the user.
+func (s *FileService) GetSecret(ctx context.Context, userID, secretName string) (*file.Secret, error) {
 	file, err := s.dbStorage.GetSecret(ctx, userID, secretName)
 	if err != nil {
 		if errors.Is(err, filerepo.ErrSecretNotFound) {
-			return nil, ErrFileEntryNotFound
+			return nil, ErrSecretEntryNotFound
 		}
 
 		return nil, fmt.Errorf("storage.GetSecret: %w", err)
@@ -199,12 +208,12 @@ func (s *FileService) GetFile(ctx context.Context, userID, secretName string) (*
 	return file, nil
 }
 
-// DownloadFile downloads a file from the object storage.
-func (s *FileService) DownloadFile(ctx context.Context, userID, secretName string) (*file.Secret, io.ReadCloser, error) {
+// DownloadSecret downloads a file from the object storage.
+func (s *FileService) DownloadSecret(ctx context.Context, userID, secretName string) (*file.Secret, io.ReadCloser, error) {
 	secret, err := s.dbStorage.GetSecret(ctx, userID, secretName)
 	if err != nil {
 		if errors.Is(err, filerepo.ErrSecretNotFound) {
-			return nil, nil, ErrFileEntryNotFound
+			return nil, nil, ErrSecretEntryNotFound
 		}
 
 		return nil, nil, fmt.Errorf("storage.GetSecret: %w", err)
@@ -239,12 +248,12 @@ func (s *FileService) DownloadFile(ctx context.Context, userID, secretName strin
 	return secret, stream, nil
 }
 
-// DeleteFile deletes a file entry in the file storage and object storage.
-func (s *FileService) DeleteFile(ctx context.Context, userID, secretName string) error {
+// DeleteSecret deletes a file entry in the file storage and object storage.
+func (s *FileService) DeleteSecret(ctx context.Context, userID, secretName string) error {
 	secret, err := s.dbStorage.GetSecret(ctx, userID, secretName)
 	if err != nil {
 		if errors.Is(err, filerepo.ErrSecretNotFound) {
-			return ErrFileEntryNotFound
+			return ErrSecretEntryNotFound
 		}
 
 		return fmt.Errorf("storage.GetSecret: %w", err)
@@ -258,7 +267,7 @@ func (s *FileService) DeleteFile(ctx context.Context, userID, secretName string)
 	}
 
 	if !found {
-		return ErrFileObjectNotFound
+		return ErrSecretObjectNotFound
 	}
 
 	err = s.objStorage.RemoveObject(ctx, objName)
@@ -269,7 +278,7 @@ func (s *FileService) DeleteFile(ctx context.Context, userID, secretName string)
 	err = s.dbStorage.DeleteSecret(ctx, userID, secretName)
 	if err != nil {
 		if errors.Is(err, filerepo.ErrSecretNotFound) {
-			return ErrFileEntryNotFound
+			return ErrSecretEntryNotFound
 		}
 
 		return fmt.Errorf("storage.DeleteSecret: %w", err)

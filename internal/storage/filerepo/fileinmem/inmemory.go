@@ -1,4 +1,5 @@
-package filerepo
+// Package fileinmem provides in-memory file storage implementation.
+package fileinmem
 
 import (
 	"context"
@@ -6,9 +7,10 @@ import (
 	"sync"
 
 	"github.com/andymarkow/gophkeeper/internal/domain/vault/file"
+	"github.com/andymarkow/gophkeeper/internal/storage/filerepo"
 )
 
-var _ Storage = (*InMemory)(nil)
+var _ filerepo.Storage = (*InMemory)(nil)
 
 // InMemory represents in-memory files storage.
 type InMemory struct {
@@ -22,6 +24,11 @@ func NewInMemory() *InMemory {
 	return &InMemory{
 		secrets: make(map[string]map[string]file.Secret),
 	}
+}
+
+// Close closes the storage.
+func (s *InMemory) Close() error {
+	return nil
 }
 
 // AddSecret adds a new secret entry to the storage.
@@ -41,18 +48,22 @@ func (s *InMemory) AddSecret(_ context.Context, secret *file.Secret) (*file.Secr
 		// UserID does not exist in the storage. Add user login and file to the storage.
 		s.secrets[secret.UserID()][secret.Name()] = *secret
 
-		return secret, nil
+		secr := s.secrets[secret.UserID()][secret.Name()]
+
+		return &secr, nil
 	}
 
 	if _, ok := secrets[secret.Name()]; ok {
 		// Secret already exists in the storage.
-		return nil, fmt.Errorf("%w: %s", ErrSecretAlreadyExists, secret.Name())
+		return nil, fmt.Errorf("%w: %s", filerepo.ErrSecretAlreadyExists, secret.Name())
 	}
 
 	// Add secret to the storage.
 	s.secrets[secret.UserID()][secret.Name()] = *secret
 
-	return secret, nil
+	secr := s.secrets[secret.UserID()][secret.Name()]
+
+	return &secr, nil
 }
 
 // GetSecret returns a secret entry from the storage.
@@ -63,7 +74,7 @@ func (s *InMemory) GetSecret(_ context.Context, userID, secretName string) (*fil
 	// Check if the user id entry exists in the storage.
 	secrets, ok := s.secrets[userID]
 	if !ok {
-		return nil, fmt.Errorf("%w for user id %s and secret id %s", ErrSecretNotFound, userID, secretName)
+		return nil, fmt.Errorf("%w for user id %s and secret id %s", filerepo.ErrSecretNotFound, userID, secretName)
 	}
 
 	// Check if the secret entry exists in the storage.
@@ -73,7 +84,7 @@ func (s *InMemory) GetSecret(_ context.Context, userID, secretName string) (*fil
 		return &s, nil
 	}
 
-	return nil, fmt.Errorf("%w for user id %s: %s", ErrSecretNotFound, userID, secretName)
+	return nil, fmt.Errorf("%w for user id %s: %s", filerepo.ErrSecretNotFound, userID, secretName)
 }
 
 // ListSecrets returns a list of secret entries from the storage.
@@ -101,20 +112,20 @@ func (s *InMemory) UpdateSecret(_ context.Context, secret *file.Secret) (*file.S
 	// Check if the user id entry exists in the storage.
 	secrets, ok := s.secrets[secret.UserID()]
 	if !ok {
-		return nil, fmt.Errorf("%w for user id %s: %s", ErrSecretNotFound, secret.UserID(), secret.Name())
+		return nil, fmt.Errorf("%w for user id %s: %s", filerepo.ErrSecretNotFound, secret.UserID(), secret.Name())
 	}
 
 	// Check if the secret entry exists in the storage.
 	if _, ok := secrets[secret.Name()]; !ok {
-		return nil, fmt.Errorf("%w for user id %s: %s", ErrSecretNotFound, secret.UserID(), secret.Name())
+		return nil, fmt.Errorf("%w for user id %s: %s", filerepo.ErrSecretNotFound, secret.UserID(), secret.Name())
 	}
 
 	// Update secret entry in the storage.
 	s.secrets[secret.UserID()][secret.Name()] = *secret
 
-	f := s.secrets[secret.UserID()][secret.Name()]
+	secrt := s.secrets[secret.UserID()][secret.Name()]
 
-	return &f, nil
+	return &secrt, nil
 }
 
 // DeleteSecret deletes a secret entry from the storage.
@@ -125,12 +136,12 @@ func (s *InMemory) DeleteSecret(_ context.Context, userID, secretName string) er
 	// Check if the user id entry exists in the storage.
 	secrets, ok := s.secrets[userID]
 	if !ok {
-		return fmt.Errorf("%w for user id %s: %s", ErrSecretNotFound, userID, secretName)
+		return fmt.Errorf("%w for user id %s: %s", filerepo.ErrSecretNotFound, userID, secretName)
 	}
 
 	// Check if the secret entry exists in the storage.
 	if _, ok := secrets[secretName]; !ok {
-		return fmt.Errorf("%w for user id %s: %s", ErrSecretNotFound, userID, secretName)
+		return fmt.Errorf("%w for user id %s: %s", filerepo.ErrSecretNotFound, userID, secretName)
 	}
 
 	// Delete secret entry from the storage.

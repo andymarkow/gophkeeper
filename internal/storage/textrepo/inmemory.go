@@ -25,6 +25,11 @@ func NewInMemory() *InMemory {
 	}
 }
 
+// Close closes the storage.
+func (s *InMemory) Close() error {
+	return nil
+}
+
 // AddSecret adds a new secret entry to the storage.
 func (s *InMemory) AddSecret(_ context.Context, secret *text.Secret) (*text.Secret, error) {
 	s.mu.Lock()

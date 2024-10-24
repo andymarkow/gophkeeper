@@ -26,6 +26,11 @@ func NewInMemory() *InMemory {
 	}
 }
 
+// Close closes the storage.
+func (s *InMemory) Close() error {
+	return nil
+}
+
 // AddUser adds a new user to the storage.
 func (s *InMemory) AddUser(_ context.Context, usr *user.User) error {
 	s.mu.Lock()
