@@ -404,7 +404,7 @@ func (h *Handlers) DownloadSecret(w http.ResponseWriter, req *http.Request) {
 func (h *Handlers) processDownloadSecretRequest(ctx context.Context, userID, secretName string) (io.ReadCloser, *httperr.HTTPError) {
 	_, stream, err := h.textsvc.DownloadSecret(ctx, userID, secretName)
 	if err != nil {
-		if errors.Is(err, textsvc.ErrSecretEntryNotFound) {
+		if errors.Is(err, textsvc.ErrSecretEntryNotFound) || errors.Is(err, textsvc.ErrSecretObjectNotFound) {
 			return nil, httperr.NewHTTPError(http.StatusNotFound, err)
 		}
 

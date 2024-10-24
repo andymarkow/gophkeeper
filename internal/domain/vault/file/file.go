@@ -21,24 +21,24 @@ type Secret struct {
 
 // ContentInfo represents the content info of a file.
 type ContentInfo struct {
+	salt     string
+	iv       string
 	fileName string
 	location string
 	checksum string
-	salt     string
-	iv       string
 	size     int64
 }
 
 // NewContentInfo creates a new file info object.
-func NewContentInfo(fileName, location, checksum, salt, iv string, size int64) (*ContentInfo, error) {
+func NewContentInfo(salt, iv, fileName, location, checksum string, size int64) *ContentInfo {
 	return &ContentInfo{
+		salt:     salt,
+		iv:       iv,
 		fileName: fileName,
 		location: location,
 		checksum: checksum,
-		salt:     salt,
-		iv:       iv,
 		size:     size,
-	}, nil
+	}
 }
 
 // NewSecret creates a new file object.
@@ -137,6 +137,26 @@ func (s *Secret) SetContentInfo(info *ContentInfo) {
 	s.info = info
 }
 
+// Salt returns the salt of the secret.
+func (i *ContentInfo) Salt() string {
+	return i.salt
+}
+
+// SetSalt sets the salt of the secret.
+func (i *ContentInfo) SetSalt(salt string) {
+	i.salt = salt
+}
+
+// IV returns the initialisation vector of the secret.
+func (i *ContentInfo) IV() string {
+	return i.iv
+}
+
+// SetIV sets the initialisation vector of the secret.
+func (i *ContentInfo) SetIV(iv string) {
+	i.iv = iv
+}
+
 // FileName returns the file name of the secret.
 func (i *ContentInfo) FileName() string {
 	return i.fileName
@@ -165,26 +185,6 @@ func (i *ContentInfo) Checksum() string {
 // SetChecksum sets the checksum of the secret.
 func (i *ContentInfo) SetChecksum(checksum string) {
 	i.checksum = checksum
-}
-
-// Salt returns the salt of the secret.
-func (i *ContentInfo) Salt() string {
-	return i.salt
-}
-
-// SetSalt sets the salt of the secret.
-func (i *ContentInfo) SetSalt(salt string) {
-	i.salt = salt
-}
-
-// IV returns the iv of the secret.
-func (i *ContentInfo) IV() string {
-	return i.iv
-}
-
-// SetIV sets the iv of the secret.
-func (i *ContentInfo) SetIV(iv string) {
-	i.iv = iv
 }
 
 // Size returns the size of the secret.

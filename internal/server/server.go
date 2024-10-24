@@ -30,6 +30,8 @@ import (
 	"github.com/andymarkow/gophkeeper/internal/storage/objrepo"
 	"github.com/andymarkow/gophkeeper/internal/storage/pgmigrate"
 	"github.com/andymarkow/gophkeeper/internal/storage/textrepo"
+	"github.com/andymarkow/gophkeeper/internal/storage/textrepo/textinmem"
+	"github.com/andymarkow/gophkeeper/internal/storage/textrepo/textpg"
 	"github.com/andymarkow/gophkeeper/internal/storage/userrepo"
 	"github.com/andymarkow/gophkeeper/internal/storage/userrepo/userinmem"
 	"github.com/andymarkow/gophkeeper/internal/storage/userrepo/userpg"
@@ -72,13 +74,10 @@ func NewServer() (*Server, error) {
 		return nil, fmt.Errorf("objStorage.InitBucket: %w", err)
 	}
 
-	textSvc := textsvc.NewSecretService(
-		textrepo.NewInMemory(),
-		objStorage,
-		textsvc.WithLogger(logger),
-		textsvc.WithCryptoKey([]byte(cfg.CryptoKey)),
-		textsvc.WithObjectBasePath("texts"),
-	)
+	textSvc, err := createTextSvc(cfg.Database.DSN, cfg.CryptoKey, logger, objStorage)
+	if err != nil {
+		return nil, fmt.Errorf("failed to init text service: %w", err)
+	}
 
 	fileSvc, err := createFileSvc(cfg.Database.DSN, cfg.CryptoKey, logger, objStorage)
 	if err != nil {
@@ -124,8 +123,8 @@ func NewServer() (*Server, error) {
 		userStorage: userStorage,
 		cardStorage: cardStorage,
 		credStorage: credStorage,
-		fileSvc:     fileSvc,
 		textSvc:     textSvc,
+		fileSvc:     fileSvc,
 	}, nil
 }
 
@@ -184,9 +183,9 @@ func (s *Server) close() {
 		s.log.Error("failed to close file service", slog.Any("error", err))
 	}
 
-	// if err := s.textSvc.Close(); err != nil {
-	// 	s.log.Error("failed to close text service", slog.Any("error", err))
-	// }
+	if err := s.textSvc.Close(); err != nil {
+		s.log.Error("failed to close text service", slog.Any("error", err))
+	}
 }
 
 func createUserRepo(connStr string, logger *slog.Logger) (userrepo.Storage, error) {
@@ -248,6 +247,31 @@ func createFileSvc(connStr, cryptoKey string, logger *slog.Logger, objStorage ob
 		filesvc.WithLogger(logger),
 		filesvc.WithCryptoKey([]byte(cryptoKey)),
 		filesvc.WithObjectBasePath("files"),
+	)
+
+	return svc, nil
+}
+
+func createTextSvc(connStr, cryptoKey string, logger *slog.Logger, objStorage objrepo.Storage) (textsvc.Service, error) {
+	var storage textrepo.Storage
+
+	if connStr == "" {
+		storage = textinmem.NewInMemory()
+	} else {
+		var err error
+
+		storage, err = textpg.NewStorage(connStr, textpg.WithLogger(logger))
+		if err != nil {
+			return nil, fmt.Errorf("textpg.NewStorage: %w", err)
+		}
+	}
+
+	svc := textsvc.NewSecretService(
+		storage,
+		objStorage,
+		textsvc.WithLogger(logger),
+		textsvc.WithCryptoKey([]byte(cryptoKey)),
+		textsvc.WithObjectBasePath("texts"),
 	)
 
 	return svc, nil

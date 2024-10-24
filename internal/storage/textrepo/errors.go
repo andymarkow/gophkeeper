@@ -3,6 +3,6 @@ package textrepo
 import "fmt"
 
 var (
-	ErrSecretEntryAlreadyExists = fmt.Errorf("secret entry already exists")
-	ErrSecretEntryNotFound      = fmt.Errorf("secret entry not found")
+	ErrSecretAlreadyExists = fmt.Errorf("text secret entry already exists")
+	ErrSecretNotFound      = fmt.Errorf("text secret entry not found")
 )

@@ -21,19 +21,19 @@ type Secret struct {
 
 // ContentInfo represents a secret content info.
 type ContentInfo struct {
-	location string
-	checksum string
 	salt     string
 	iv       string
+	location string
+	checksum string
 }
 
 // NewContentInfo creates a new secret content info.
-func NewContentInfo(location, checksum, salt, iv string) *ContentInfo {
+func NewContentInfo(salt, iv, location, checksum string) *ContentInfo {
 	return &ContentInfo{
-		location: location,
-		checksum: checksum,
 		salt:     salt,
 		iv:       iv,
+		location: location,
+		checksum: checksum,
 	}
 }
 
@@ -128,6 +128,16 @@ func (s *Secret) SetContentInfo(info *ContentInfo) {
 	s.info = info
 }
 
+// Salt returns the salt of the secret.
+func (i *ContentInfo) Salt() string {
+	return i.salt
+}
+
+// IV returns the initialisation vector of the secret.
+func (i *ContentInfo) IV() string {
+	return i.iv
+}
+
 // Location returns the location of the secret.
 func (i *ContentInfo) Location() string {
 	return i.location
@@ -136,14 +146,4 @@ func (i *ContentInfo) Location() string {
 // Checksum returns the checksum of the secret.
 func (i *ContentInfo) Checksum() string {
 	return i.checksum
-}
-
-// Salt returns the salt of the secret.
-func (i *ContentInfo) Salt() string {
-	return i.salt
-}
-
-// IV returns the iv of the secret.
-func (i *ContentInfo) IV() string {
-	return i.iv
 }

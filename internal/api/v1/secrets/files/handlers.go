@@ -383,7 +383,7 @@ func (h *Handlers) processDownloadSecretContentRequest(ctx context.Context, user
 ) (string, io.ReadCloser, *httperr.HTTPError) {
 	secret, rd, err := h.filesvc.DownloadSecret(ctx, userID, secretName)
 	if err != nil {
-		if errors.Is(err, filesvc.ErrSecretEntryNotFound) {
+		if errors.Is(err, filesvc.ErrSecretEntryNotFound) || errors.Is(err, filesvc.ErrSecretObjectNotFound) {
 			return "", nil, httperr.NewHTTPError(http.StatusNotFound, err)
 		}
 
@@ -425,7 +425,7 @@ func (h *Handlers) DeleteSecret(w http.ResponseWriter, req *http.Request) {
 func (h *Handlers) processDeleteSecretRequest(ctx context.Context, userID, secretName string) *httperr.HTTPError {
 	err := h.filesvc.DeleteSecret(ctx, userID, secretName)
 	if err != nil {
-		if errors.Is(err, filesvc.ErrSecretEntryNotFound) {
+		if errors.Is(err, filesvc.ErrSecretEntryNotFound) || errors.Is(err, filesvc.ErrSecretObjectNotFound) {
 			return httperr.NewHTTPError(http.StatusNotFound, err)
 		}
 

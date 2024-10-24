@@ -168,10 +168,7 @@ func (s *FileService) UploadSecret(ctx context.Context, userID, secretName strin
 	checksum := hash.Sum32()
 
 	// Create new content info object for the secret.
-	contInfo, err := file.NewContentInfo(req.FileName, info.Location(), fmt.Sprintf("%d", checksum), stream.SaltHex(), stream.IVHex(), info.Size())
-	if err != nil {
-		return nil, fmt.Errorf("file.NewContentInfo: %w", err)
-	}
+	contInfo := file.NewContentInfo(stream.SaltHex(), stream.IVHex(), req.FileName, info.Location(), fmt.Sprintf("%d", checksum), info.Size())
 
 	secret.SetContentInfo(contInfo)
 	secret.SetUpdatedAt(time.Now())
@@ -221,6 +218,14 @@ func (s *FileService) DownloadSecret(ctx context.Context, userID, secretName str
 
 	objName := s.getObjName(userID, secret.ID())
 
+	if _, err := s.objStorage.GetObjectInfo(ctx, objName); err != nil {
+		if errors.Is(err, objrepo.ErrObjNotExist) {
+			return nil, nil, ErrSecretObjectNotFound
+		}
+
+		return nil, nil, fmt.Errorf("storage.GetObjectInfo: %w", err)
+	}
+
 	obj, err := s.objStorage.GetObject(ctx, objName)
 	if err != nil {
 		return nil, nil, fmt.Errorf("storage.GetObject: %w", err)
@@ -261,15 +266,6 @@ func (s *FileService) DeleteSecret(ctx context.Context, userID, secretName strin
 
 	objName := s.getObjName(userID, secret.ID())
 
-	_, found, err := s.statObject(ctx, objName)
-	if err != nil {
-		return fmt.Errorf("failed to stat object: %w", err)
-	}
-
-	if !found {
-		return ErrSecretObjectNotFound
-	}
-
 	err = s.objStorage.RemoveObject(ctx, objName)
 	if err != nil {
 		return fmt.Errorf("storage.RemoveObject: %w", err)
@@ -295,17 +291,4 @@ func (s *FileService) getObjName(userID, secretID string) string {
 	}
 
 	return objName
-}
-
-func (s *FileService) statObject(ctx context.Context, objName string) (*objrepo.ObjectInfo, bool, error) {
-	info, err := s.objStorage.GetObjectInfo(ctx, objName)
-	if err != nil {
-		if errors.Is(err, objrepo.ErrObjNotExist) {
-			return nil, false, nil
-		}
-
-		return nil, false, fmt.Errorf("storage.GetObjectInfo: %w", err)
-	}
-
-	return info, true, nil
 }

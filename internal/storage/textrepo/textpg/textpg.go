@@ -1,5 +1,5 @@
-// Package filepg provides PostgreSQL storage implementation for file secrets.
-package filepg
+// Package textpg provides PostgreSQL storage implementation for text secrets.
+package textpg
 
 import (
 	"context"
@@ -16,9 +16,9 @@ import (
 	// Postgres driver.
 	_ "github.com/jackc/pgx/v5/stdlib"
 
-	"github.com/andymarkow/gophkeeper/internal/domain/vault/file"
+	"github.com/andymarkow/gophkeeper/internal/domain/vault/text"
 	"github.com/andymarkow/gophkeeper/internal/pgutils"
-	"github.com/andymarkow/gophkeeper/internal/storage/filerepo"
+	"github.com/andymarkow/gophkeeper/internal/storage/textrepo"
 )
 
 // Storage implements PostgreSQL storage.
@@ -126,21 +126,20 @@ func (s *Storage) Ping(ctx context.Context) error {
 	return nil
 }
 
-// AddSecret adds a file secret entry to the storage.
-func (s *Storage) AddSecret(ctx context.Context, secret *file.Secret) (*file.Secret, error) {
+// AddSecret adds a text secret entry to the storage.
+func (s *Storage) AddSecret(ctx context.Context, secret *text.Secret) (*text.Secret, error) {
 	err := pgutils.WithRetry(func() error {
-		query := `INSERT INTO vault_files
-			(id, name, user_id, created_at, updated_at, metadata, salt, iv, filename, location, checksum, size)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`
+		query := `INSERT INTO vault_texts
+			(id, name, user_id, created_at, updated_at, metadata, salt, iv, location, checksum)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`
 
 		_, err := s.db.ExecContext(ctx, query,
 			secret.ID(), secret.Name(), secret.UserID(), secret.CreatedAt(), secret.UpdatedAt(), secret.Metadata(),
-			secret.ContentInfo().Salt(), secret.ContentInfo().IV(), secret.ContentInfo().FileName(),
-			secret.ContentInfo().Location(), secret.ContentInfo().Checksum(), secret.ContentInfo().Size())
+			secret.ContentInfo().Salt(), secret.ContentInfo().IV(), secret.ContentInfo().Location(), secret.ContentInfo().Checksum())
 		if err != nil {
 			var pgErr *pgconn.PgError
 			if errors.As(err, &pgErr) && pgerrcode.IsIntegrityConstraintViolation(pgErr.Code) {
-				return filerepo.ErrSecretAlreadyExists
+				return textrepo.ErrSecretAlreadyExists
 			}
 
 			return fmt.Errorf("db.ExecContext: %w", err)
@@ -160,23 +159,22 @@ func (s *Storage) AddSecret(ctx context.Context, secret *file.Secret) (*file.Sec
 	return secr, nil
 }
 
-// GetSecret returns a file secret entry from the storage.
-func (s *Storage) GetSecret(ctx context.Context, userID, name string) (*file.Secret, error) {
-	var dbSecret filerepo.Secret
+// GetSecret returns a text secret entry from the storage.
+func (s *Storage) GetSecret(ctx context.Context, userID, name string) (*text.Secret, error) {
+	var dbSecret textrepo.Secret
 
 	err := pgutils.WithRetry(func() error {
-		query := `SELECT id, name, user_id, created_at, updated_at, metadata, salt, iv, filename, location, checksum, size
-			FROM vault_files
+		query := `SELECT id, name, user_id, created_at, updated_at, metadata, salt, iv, location, checksum
+			FROM vault_texts
 			WHERE user_id = $1 AND name = $2`
 
 		row := s.db.QueryRowContext(ctx, query, userID, name)
 
-		err := row.Scan(&dbSecret.ID, &dbSecret.Name, &dbSecret.UserID, &dbSecret.CreatedAt,
-			&dbSecret.UpdatedAt, &dbSecret.Metadata, &dbSecret.Salt, &dbSecret.IV, &dbSecret.FileName,
-			&dbSecret.Location, &dbSecret.Checksum, &dbSecret.Size)
+		err := row.Scan(&dbSecret.ID, &dbSecret.Name, &dbSecret.UserID, &dbSecret.CreatedAt, &dbSecret.UpdatedAt,
+			&dbSecret.Metadata, &dbSecret.Salt, &dbSecret.IV, &dbSecret.Location, &dbSecret.Checksum)
 		if err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
-				return filerepo.ErrSecretNotFound
+				return textrepo.ErrSecretNotFound
 			}
 
 			return fmt.Errorf("row.Scan: %w", err)
@@ -195,25 +193,24 @@ func (s *Storage) GetSecret(ctx context.Context, userID, name string) (*file.Sec
 		return nil, fmt.Errorf("failed to unmarshal metadata: %w", err)
 	}
 
-	info := file.NewContentInfo(dbSecret.Salt, dbSecret.IV, dbSecret.FileName,
-		dbSecret.Location, dbSecret.Checksum, dbSecret.Size)
+	info := text.NewContentInfo(dbSecret.Salt, dbSecret.IV, dbSecret.Location, dbSecret.Checksum)
 
-	secret, err := file.NewSecret(dbSecret.ID, dbSecret.Name, dbSecret.UserID, metadata,
+	secret, err := text.NewSecret(dbSecret.ID, dbSecret.Name, dbSecret.UserID, metadata,
 		dbSecret.CreatedAt, dbSecret.UpdatedAt, info)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create file secret: %w", err)
+		return nil, fmt.Errorf("failed to create text secret: %w", err)
 	}
 
 	return secret, nil
 }
 
-// ListSecrets returns a list of file secret entries from the storage.
-func (s *Storage) ListSecrets(ctx context.Context, userID string) ([]*file.Secret, error) {
-	var dbSecrets []filerepo.Secret
+// ListSecrets returns a list of text secret entries from the storage.
+func (s *Storage) ListSecrets(ctx context.Context, userID string) ([]*text.Secret, error) {
+	var dbSecrets []textrepo.Secret
 
 	err := pgutils.WithRetry(func() error {
-		query := `SELECT id, name, user_id, created_at, updated_at, metadata, filename, location, checksum, size
-			FROM vault_files WHERE user_id = $1`
+		query := `SELECT id, name, user_id, created_at, updated_at, metadata, location, checksum
+			FROM vault_texts WHERE user_id = $1`
 
 		rows, err := s.db.QueryContext(ctx, query, userID)
 		if err != nil {
@@ -222,11 +219,10 @@ func (s *Storage) ListSecrets(ctx context.Context, userID string) ([]*file.Secre
 		defer rows.Close()
 
 		for rows.Next() {
-			var dbSecret filerepo.Secret
+			var dbSecret textrepo.Secret
 
 			err := rows.Scan(&dbSecret.ID, &dbSecret.Name, &dbSecret.UserID, &dbSecret.CreatedAt,
-				&dbSecret.UpdatedAt, &dbSecret.Metadata, &dbSecret.FileName, &dbSecret.Location,
-				&dbSecret.Checksum, &dbSecret.Size)
+				&dbSecret.UpdatedAt, &dbSecret.Metadata, &dbSecret.Location, &dbSecret.Checksum)
 			if err != nil {
 				return fmt.Errorf("rows.Scan: %w", err)
 			}
@@ -244,7 +240,7 @@ func (s *Storage) ListSecrets(ctx context.Context, userID string) ([]*file.Secre
 		return nil, fmt.Errorf("%w", err)
 	}
 
-	secrets := make([]*file.Secret, 0, len(dbSecrets))
+	secrets := make([]*text.Secret, 0, len(dbSecrets))
 
 	for _, dbSecret := range dbSecrets {
 		var metadata map[string]string
@@ -254,12 +250,12 @@ func (s *Storage) ListSecrets(ctx context.Context, userID string) ([]*file.Secre
 			return nil, fmt.Errorf("failed to unmarshal metadata: %w", err)
 		}
 
-		info := file.NewContentInfo("", "", dbSecret.FileName, dbSecret.Location, dbSecret.Checksum, dbSecret.Size)
+		info := text.NewContentInfo("", "", dbSecret.Location, dbSecret.Checksum)
 
-		secret, err := file.NewSecret(dbSecret.ID, dbSecret.Name, dbSecret.UserID, metadata,
+		secret, err := text.NewSecret(dbSecret.ID, dbSecret.Name, dbSecret.UserID, metadata,
 			dbSecret.CreatedAt, dbSecret.UpdatedAt, info)
 		if err != nil {
-			return nil, fmt.Errorf("failed to create file secret: %w", err)
+			return nil, fmt.Errorf("failed to create text secret: %w", err)
 		}
 
 		secrets = append(secrets, secret)
@@ -268,17 +264,16 @@ func (s *Storage) ListSecrets(ctx context.Context, userID string) ([]*file.Secre
 	return secrets, nil
 }
 
-// UpdateSecret updates a file secret entry in the storage.
-func (s *Storage) UpdateSecret(ctx context.Context, secret *file.Secret) (*file.Secret, error) {
+// UpdateSecret updates a text secret entry in the storage.
+func (s *Storage) UpdateSecret(ctx context.Context, secret *text.Secret) (*text.Secret, error) {
 	err := pgutils.WithRetry(func() error {
-		query := `UPDATE vault_files
-			SET updated_at = $1, metadata = $2, salt = $3, iv = $4, filename = $5, location = $6, checksum = $7, size = $8
-			WHERE user_id = $9 AND name = $10`
+		query := `UPDATE vault_texts
+			SET updated_at = $1, metadata = $2, salt = $3, iv = $4, location = $5, checksum = $6
+			WHERE user_id = $7 AND name = $8`
 
 		_, err := s.db.ExecContext(ctx, query, secret.UpdatedAt(), secret.Metadata(),
-			secret.ContentInfo().Salt(), secret.ContentInfo().IV(), secret.ContentInfo().FileName(),
-			secret.ContentInfo().Location(), secret.ContentInfo().Checksum(), secret.ContentInfo().Size(),
-			secret.UserID(), secret.Name())
+			secret.ContentInfo().Salt(), secret.ContentInfo().IV(), secret.ContentInfo().Location(),
+			secret.ContentInfo().Checksum(), secret.UserID(), secret.Name())
 		if err != nil {
 			return fmt.Errorf("db.ExecContext: %w", err)
 		}
@@ -297,10 +292,10 @@ func (s *Storage) UpdateSecret(ctx context.Context, secret *file.Secret) (*file.
 	return secr, nil
 }
 
-// DeleteSecret deletes a file secret entry from the storage.
+// DeleteSecret deletes a text secret entry from the storage.
 func (s *Storage) DeleteSecret(ctx context.Context, userID, secretName string) error {
 	err := pgutils.WithRetry(func() error {
-		query := `DELETE FROM vault_files WHERE user_id = $1 AND name = $2`
+		query := `DELETE FROM vault_texts WHERE user_id = $1 AND name = $2`
 
 		result, err := s.db.ExecContext(ctx, query, userID, secretName)
 		if err != nil {
@@ -313,7 +308,7 @@ func (s *Storage) DeleteSecret(ctx context.Context, userID, secretName string) e
 		}
 
 		if rowsAffected == 0 {
-			return filerepo.ErrSecretNotFound
+			return textrepo.ErrSecretNotFound
 		}
 
 		return nil

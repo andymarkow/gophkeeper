@@ -9,7 +9,7 @@ import (
 
 // Service represents the text data service.
 type Service interface {
-	// io.Closer
+	io.Closer
 
 	CreateSecret(ctx context.Context, userID, secretName string, metadata map[string]string) (*text.Secret, error)
 	ListSecrets(ctx context.Context, userID string) ([]*text.Secret, error)

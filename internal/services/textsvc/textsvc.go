@@ -67,6 +67,15 @@ func WithCryptoKey(key []byte) Option {
 	}
 }
 
+// Close closes the service.
+func (s *SecretService) Close() error {
+	if err := s.dbStorage.Close(); err != nil {
+		return fmt.Errorf("storage.Close: %w", err)
+	}
+
+	return nil
+}
+
 // CreateSecret creates a new secret entry.
 func (s *SecretService) CreateSecret(ctx context.Context, userID, secretName string, metadata map[string]string) (*text.Secret, error) {
 	// Create new secret entry.
@@ -78,7 +87,7 @@ func (s *SecretService) CreateSecret(ctx context.Context, userID, secretName str
 	// Store the text data entry in the text storage.
 	txt, err := s.dbStorage.AddSecret(ctx, text)
 	if err != nil {
-		if errors.Is(err, textrepo.ErrSecretEntryAlreadyExists) {
+		if errors.Is(err, textrepo.ErrSecretAlreadyExists) {
 			return nil, fmt.Errorf("%w: %s", ErrSecretEntryAlreadyExists, secretName)
 		}
 
@@ -102,7 +111,7 @@ func (s *SecretService) ListSecrets(ctx context.Context, userID string) ([]*text
 func (s *SecretService) GetSecret(ctx context.Context, userID, secretName string) (*text.Secret, error) {
 	secret, err := s.dbStorage.GetSecret(ctx, userID, secretName)
 	if err != nil {
-		if errors.Is(err, textrepo.ErrSecretEntryNotFound) {
+		if errors.Is(err, textrepo.ErrSecretNotFound) {
 			return nil, ErrSecretEntryNotFound
 		}
 
@@ -118,7 +127,7 @@ func (s *SecretService) UpdateSecret(ctx context.Context, userID, secretName str
 	// Get the secret entry from the DB storage.
 	secret, err := s.dbStorage.GetSecret(ctx, userID, secretName)
 	if err != nil {
-		if errors.Is(err, textrepo.ErrSecretEntryNotFound) {
+		if errors.Is(err, textrepo.ErrSecretNotFound) {
 			return nil, ErrSecretEntryNotFound
 		}
 
@@ -144,7 +153,7 @@ func (s *SecretService) UpdateSecret(ctx context.Context, userID, secretName str
 func (s *SecretService) DeleteSecret(ctx context.Context, userID, secretName string) error {
 	secret, err := s.dbStorage.GetSecret(ctx, userID, secretName)
 	if err != nil {
-		if errors.Is(err, textrepo.ErrSecretEntryNotFound) {
+		if errors.Is(err, textrepo.ErrSecretNotFound) {
 			return ErrSecretEntryNotFound
 		}
 
@@ -160,7 +169,7 @@ func (s *SecretService) DeleteSecret(ctx context.Context, userID, secretName str
 
 	err = s.dbStorage.DeleteSecret(ctx, userID, secretName)
 	if err != nil {
-		if errors.Is(err, textrepo.ErrSecretEntryNotFound) {
+		if errors.Is(err, textrepo.ErrSecretNotFound) {
 			return ErrSecretEntryNotFound
 		}
 
@@ -176,7 +185,7 @@ func (s *SecretService) UploadSecret(ctx context.Context, userID, secretName str
 	// Secret entry must exists before the secret data is uploaded to the object storage.
 	secret, err := s.dbStorage.GetSecret(ctx, userID, secretName)
 	if err != nil {
-		if errors.Is(err, textrepo.ErrSecretEntryNotFound) {
+		if errors.Is(err, textrepo.ErrSecretNotFound) {
 			return nil, ErrSecretEntryNotFound
 		}
 
@@ -203,7 +212,7 @@ func (s *SecretService) UploadSecret(ctx context.Context, userID, secretName str
 	checksum := hash.Sum32()
 
 	// Create new content info object for the secret.
-	contInfo := text.NewContentInfo(info.Location(), fmt.Sprintf("%d", checksum), stream.SaltHex(), stream.IVHex())
+	contInfo := text.NewContentInfo(stream.SaltHex(), stream.IVHex(), info.Location(), fmt.Sprintf("%d", checksum))
 
 	secret.SetContentInfo(contInfo)
 	secret.SetUpdatedAt(time.Now())
@@ -220,7 +229,7 @@ func (s *SecretService) UploadSecret(ctx context.Context, userID, secretName str
 func (s *SecretService) DownloadSecret(ctx context.Context, userID, secretName string) (*text.Secret, io.ReadCloser, error) {
 	secret, err := s.dbStorage.GetSecret(ctx, userID, secretName)
 	if err != nil {
-		if errors.Is(err, textrepo.ErrSecretEntryNotFound) {
+		if errors.Is(err, textrepo.ErrSecretNotFound) {
 			return nil, nil, ErrSecretEntryNotFound
 		}
 
@@ -228,6 +237,14 @@ func (s *SecretService) DownloadSecret(ctx context.Context, userID, secretName s
 	}
 
 	objName := s.getObjName(userID, secret.ID())
+
+	if _, err := s.objStorage.GetObjectInfo(ctx, objName); err != nil {
+		if errors.Is(err, objrepo.ErrObjNotExist) {
+			return nil, nil, ErrSecretObjectNotFound
+		}
+
+		return nil, nil, fmt.Errorf("storage.GetObjectInfo: %w", err)
+	}
 
 	obj, err := s.objStorage.GetObject(ctx, objName)
 	if err != nil {

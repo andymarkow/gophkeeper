@@ -1,4 +1,5 @@
-package textrepo
+// Package textinmem provides in-memory text data storage.
+package textinmem
 
 import (
 	"context"
@@ -6,9 +7,10 @@ import (
 	"sync"
 
 	"github.com/andymarkow/gophkeeper/internal/domain/vault/text"
+	"github.com/andymarkow/gophkeeper/internal/storage/textrepo"
 )
 
-var _ Storage = (*InMemory)(nil)
+var _ textrepo.Storage = (*InMemory)(nil)
 
 // InMemory represents in-memory text data storage.
 type InMemory struct {
@@ -47,18 +49,22 @@ func (s *InMemory) AddSecret(_ context.Context, secret *text.Secret) (*text.Secr
 		// UserID does not exist in the storage. Add user login and text data entry to the storage.
 		s.secrets[secret.UserID()][secret.Name()] = *secret
 
-		return secret, nil
+		secr := s.secrets[secret.UserID()][secret.Name()]
+
+		return &secr, nil
 	}
 
 	if _, ok := secrets[secret.Name()]; ok {
 		// Text data entry already exists in the storage.
-		return nil, fmt.Errorf("%w: %s", ErrSecretEntryAlreadyExists, secret.Name())
+		return nil, fmt.Errorf("%w: %s", textrepo.ErrSecretAlreadyExists, secret.Name())
 	}
 
 	// Add secret entry to the storage.
 	s.secrets[secret.UserID()][secret.Name()] = *secret
 
-	return secret, nil
+	secr := s.secrets[secret.UserID()][secret.Name()]
+
+	return &secr, nil
 }
 
 // GetSecret returns a secret entry from the storage.
@@ -69,7 +75,7 @@ func (s *InMemory) GetSecret(_ context.Context, userID, secretName string) (*tex
 	// Check if the user id entry exists in the storage.
 	secrets, ok := s.secrets[userID]
 	if !ok {
-		return nil, fmt.Errorf("%w for user id %s: %s", ErrSecretEntryNotFound, userID, secretName)
+		return nil, fmt.Errorf("%w for user id %s: %s", textrepo.ErrSecretNotFound, userID, secretName)
 	}
 
 	// Check if the secret entry exists in the storage.
@@ -79,7 +85,7 @@ func (s *InMemory) GetSecret(_ context.Context, userID, secretName string) (*tex
 		return &sec, nil
 	}
 
-	return nil, fmt.Errorf("%w for user id %s: %s", ErrSecretEntryNotFound, userID, secretName)
+	return nil, fmt.Errorf("%w for user id %s: %s", textrepo.ErrSecretNotFound, userID, secretName)
 }
 
 // ListSecrets returns a list of secret entries from the storage.
@@ -107,20 +113,20 @@ func (s *InMemory) UpdateSecret(_ context.Context, secret *text.Secret) (*text.S
 	// Check if the user id entry exists in the storage.
 	secrets, ok := s.secrets[secret.UserID()]
 	if !ok {
-		return nil, fmt.Errorf("%w for user id %s: %s", ErrSecretEntryNotFound, secret.UserID(), secret.Name())
+		return nil, fmt.Errorf("%w for user id %s: %s", textrepo.ErrSecretNotFound, secret.UserID(), secret.Name())
 	}
 
 	// Check if the text data entry exists in the storage.
 	if _, ok := secrets[secret.Name()]; !ok {
-		return nil, fmt.Errorf("%w for user id %s: %s", ErrSecretEntryNotFound, secret.UserID(), secret.Name())
+		return nil, fmt.Errorf("%w for user id %s: %s", textrepo.ErrSecretNotFound, secret.UserID(), secret.Name())
 	}
 
 	// Update secret entry in the storage.
 	s.secrets[secret.UserID()][secret.Name()] = *secret
 
-	sec := s.secrets[secret.UserID()][secret.Name()]
+	secr := s.secrets[secret.UserID()][secret.Name()]
 
-	return &sec, nil
+	return &secr, nil
 }
 
 // DeleteSecret deletes a secret entry from the storage.
@@ -131,12 +137,12 @@ func (s *InMemory) DeleteSecret(_ context.Context, userID, secretName string) er
 	// Check if the user id entry exists in the storage.
 	secrets, ok := s.secrets[userID]
 	if !ok {
-		return fmt.Errorf("%w for user id %s: %s", ErrSecretEntryNotFound, userID, secretName)
+		return fmt.Errorf("%w for user id %s: %s", textrepo.ErrSecretNotFound, userID, secretName)
 	}
 
 	// Check if the secret entry exists in the storage.
 	if _, ok := secrets[secretName]; !ok {
-		return fmt.Errorf("%w for user id %s: %s", ErrSecretEntryNotFound, userID, secretName)
+		return fmt.Errorf("%w for user id %s: %s", textrepo.ErrSecretNotFound, userID, secretName)
 	}
 
 	// Delete secret entry from the storage.
