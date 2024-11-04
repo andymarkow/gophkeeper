@@ -1,23 +1,25 @@
 package users
 
-// CreateUserRequest represents a request to create a new user.
-type CreateUserRequest struct {
+// SignUpUserRequest represents a request to create a new user.
+type SignUpUserRequest struct {
 	Login    string `json:"login"`
 	Password string `json:"password"`
 }
 
-// CreateUserResponse represents a response to create a new user.
-type CreateUserResponse struct {
+// SignUpUserResponse represents a response to create a new user.
+type SignUpUserResponse struct {
+	ID    string `json:"id"`
 	Token string `json:"token"`
 }
 
-// LoginUserRequest represents a request to login a user.
-type LoginUserRequest struct {
+// SignInUserRequest represents a request to login a user.
+type SignInUserRequest struct {
 	Login    string `json:"login"`
 	Password string `json:"password"`
 }
 
-// LoginUserResponse represents a response to login a user.
-type LoginUserResponse struct {
+// SignInUserResponse represents a response to login a user.
+type SignInUserResponse struct {
+	ID    string `json:"id"`
 	Token string `json:"token"`
 }

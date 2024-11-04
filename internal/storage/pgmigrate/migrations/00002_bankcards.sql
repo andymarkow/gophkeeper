@@ -5,6 +5,7 @@ CREATE TABLE vault_bankcards (
     user_id UUID NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+    version BIGINT NOT NULL DEFAULT 0,
     metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
     data JSONB NOT NULL DEFAULT '{}'::jsonb
 );

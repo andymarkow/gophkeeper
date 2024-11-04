@@ -27,8 +27,8 @@ func NewRouter(repo userrepo.Storage, jwtSecret []byte, opts *Options) chi.Route
 
 	r := chi.NewRouter()
 
-	r.Post("/signup", h.CreateUser)
-	r.Post("/signin", h.LoginUser)
+	r.Post("/signup", h.SignUpUser)
+	r.Post("/signin", h.SignInUser)
 
 	return r
 }

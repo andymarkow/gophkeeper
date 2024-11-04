@@ -130,11 +130,11 @@ func (s *Storage) Ping(ctx context.Context) error {
 func (s *Storage) AddSecret(ctx context.Context, secret *file.Secret) (*file.Secret, error) {
 	err := pgutils.WithRetry(func() error {
 		query := `INSERT INTO vault_files
-			(id, name, user_id, created_at, updated_at, metadata, salt, iv, filename, location, checksum, size)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`
+			(id, name, user_id, created_at, updated_at, version, metadata, salt, iv, filename, location, checksum, size)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`
 
 		_, err := s.db.ExecContext(ctx, query,
-			secret.ID(), secret.Name(), secret.UserID(), secret.CreatedAt(), secret.UpdatedAt(), secret.Metadata(),
+			secret.ID(), secret.Name(), secret.UserID(), secret.CreatedAt(), secret.UpdatedAt(), secret.Version(), secret.Metadata(),
 			secret.ContentInfo().Salt(), secret.ContentInfo().IV(), secret.ContentInfo().FileName(),
 			secret.ContentInfo().Location(), secret.ContentInfo().Checksum(), secret.ContentInfo().Size())
 		if err != nil {
@@ -165,14 +165,14 @@ func (s *Storage) GetSecret(ctx context.Context, userID, name string) (*file.Sec
 	var dbSecret filerepo.Secret
 
 	err := pgutils.WithRetry(func() error {
-		query := `SELECT id, name, user_id, created_at, updated_at, metadata, salt, iv, filename, location, checksum, size
+		query := `SELECT id, name, user_id, created_at, updated_at, version, metadata, salt, iv, filename, location, checksum, size
 			FROM vault_files
 			WHERE user_id = $1 AND name = $2`
 
 		row := s.db.QueryRowContext(ctx, query, userID, name)
 
-		err := row.Scan(&dbSecret.ID, &dbSecret.Name, &dbSecret.UserID, &dbSecret.CreatedAt,
-			&dbSecret.UpdatedAt, &dbSecret.Metadata, &dbSecret.Salt, &dbSecret.IV, &dbSecret.FileName,
+		err := row.Scan(&dbSecret.ID, &dbSecret.Name, &dbSecret.UserID, &dbSecret.CreatedAt, &dbSecret.UpdatedAt,
+			&dbSecret.Version, &dbSecret.Metadata, &dbSecret.Salt, &dbSecret.IV, &dbSecret.FileName,
 			&dbSecret.Location, &dbSecret.Checksum, &dbSecret.Size)
 		if err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
@@ -199,7 +199,7 @@ func (s *Storage) GetSecret(ctx context.Context, userID, name string) (*file.Sec
 		dbSecret.Location, dbSecret.Checksum, dbSecret.Size)
 
 	secret, err := file.NewSecret(dbSecret.ID, dbSecret.Name, dbSecret.UserID, metadata,
-		dbSecret.CreatedAt, dbSecret.UpdatedAt, info)
+		dbSecret.CreatedAt, dbSecret.UpdatedAt, dbSecret.Version, info)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create file secret: %w", err)
 	}
@@ -212,7 +212,7 @@ func (s *Storage) ListSecrets(ctx context.Context, userID string) ([]*file.Secre
 	var dbSecrets []filerepo.Secret
 
 	err := pgutils.WithRetry(func() error {
-		query := `SELECT id, name, user_id, created_at, updated_at, metadata, filename, location, checksum, size
+		query := `SELECT id, name, user_id, created_at, updated_at, version, metadata, filename, location, checksum, size
 			FROM vault_files WHERE user_id = $1`
 
 		rows, err := s.db.QueryContext(ctx, query, userID)
@@ -224,8 +224,8 @@ func (s *Storage) ListSecrets(ctx context.Context, userID string) ([]*file.Secre
 		for rows.Next() {
 			var dbSecret filerepo.Secret
 
-			err := rows.Scan(&dbSecret.ID, &dbSecret.Name, &dbSecret.UserID, &dbSecret.CreatedAt,
-				&dbSecret.UpdatedAt, &dbSecret.Metadata, &dbSecret.FileName, &dbSecret.Location,
+			err := rows.Scan(&dbSecret.ID, &dbSecret.Name, &dbSecret.UserID, &dbSecret.CreatedAt, &dbSecret.UpdatedAt,
+				&dbSecret.Version, &dbSecret.Metadata, &dbSecret.FileName, &dbSecret.Location,
 				&dbSecret.Checksum, &dbSecret.Size)
 			if err != nil {
 				return fmt.Errorf("rows.Scan: %w", err)
@@ -257,7 +257,7 @@ func (s *Storage) ListSecrets(ctx context.Context, userID string) ([]*file.Secre
 		info := file.NewContentInfo("", "", dbSecret.FileName, dbSecret.Location, dbSecret.Checksum, dbSecret.Size)
 
 		secret, err := file.NewSecret(dbSecret.ID, dbSecret.Name, dbSecret.UserID, metadata,
-			dbSecret.CreatedAt, dbSecret.UpdatedAt, info)
+			dbSecret.CreatedAt, dbSecret.UpdatedAt, dbSecret.Version, info)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create file secret: %w", err)
 		}
@@ -272,10 +272,10 @@ func (s *Storage) ListSecrets(ctx context.Context, userID string) ([]*file.Secre
 func (s *Storage) UpdateSecret(ctx context.Context, secret *file.Secret) (*file.Secret, error) {
 	err := pgutils.WithRetry(func() error {
 		query := `UPDATE vault_files
-			SET updated_at = $1, metadata = $2, salt = $3, iv = $4, filename = $5, location = $6, checksum = $7, size = $8
-			WHERE user_id = $9 AND name = $10`
+			SET updated_at = $1, version = $2, metadata = $3, salt = $4, iv = $5, filename = $6, location = $7, checksum = $8, size = $9
+			WHERE user_id = $10 AND name = $11`
 
-		_, err := s.db.ExecContext(ctx, query, secret.UpdatedAt(), secret.Metadata(),
+		_, err := s.db.ExecContext(ctx, query, secret.UpdatedAt(), secret.Version(), secret.Metadata(),
 			secret.ContentInfo().Salt(), secret.ContentInfo().IV(), secret.ContentInfo().FileName(),
 			secret.ContentInfo().Location(), secret.ContentInfo().Checksum(), secret.ContentInfo().Size(),
 			secret.UserID(), secret.Name())

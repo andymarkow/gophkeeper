@@ -130,11 +130,11 @@ func (s *Storage) Ping(ctx context.Context) error {
 func (s *Storage) AddSecret(ctx context.Context, secret *text.Secret) (*text.Secret, error) {
 	err := pgutils.WithRetry(func() error {
 		query := `INSERT INTO vault_texts
-			(id, name, user_id, created_at, updated_at, metadata, salt, iv, location, checksum)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`
+			(id, name, user_id, created_at, updated_at, version, metadata, salt, iv, location, checksum)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`
 
 		_, err := s.db.ExecContext(ctx, query,
-			secret.ID(), secret.Name(), secret.UserID(), secret.CreatedAt(), secret.UpdatedAt(), secret.Metadata(),
+			secret.ID(), secret.Name(), secret.UserID(), secret.CreatedAt(), secret.UpdatedAt(), secret.Version(), secret.Metadata(),
 			secret.ContentInfo().Salt(), secret.ContentInfo().IV(), secret.ContentInfo().Location(), secret.ContentInfo().Checksum())
 		if err != nil {
 			var pgErr *pgconn.PgError
@@ -164,14 +164,14 @@ func (s *Storage) GetSecret(ctx context.Context, userID, name string) (*text.Sec
 	var dbSecret textrepo.Secret
 
 	err := pgutils.WithRetry(func() error {
-		query := `SELECT id, name, user_id, created_at, updated_at, metadata, salt, iv, location, checksum
+		query := `SELECT id, name, user_id, created_at, updated_at, version, metadata, salt, iv, location, checksum
 			FROM vault_texts
 			WHERE user_id = $1 AND name = $2`
 
 		row := s.db.QueryRowContext(ctx, query, userID, name)
 
 		err := row.Scan(&dbSecret.ID, &dbSecret.Name, &dbSecret.UserID, &dbSecret.CreatedAt, &dbSecret.UpdatedAt,
-			&dbSecret.Metadata, &dbSecret.Salt, &dbSecret.IV, &dbSecret.Location, &dbSecret.Checksum)
+			&dbSecret.Version, &dbSecret.Metadata, &dbSecret.Salt, &dbSecret.IV, &dbSecret.Location, &dbSecret.Checksum)
 		if err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
 				return textrepo.ErrSecretNotFound
@@ -196,7 +196,7 @@ func (s *Storage) GetSecret(ctx context.Context, userID, name string) (*text.Sec
 	info := text.NewContentInfo(dbSecret.Salt, dbSecret.IV, dbSecret.Location, dbSecret.Checksum)
 
 	secret, err := text.NewSecret(dbSecret.ID, dbSecret.Name, dbSecret.UserID, metadata,
-		dbSecret.CreatedAt, dbSecret.UpdatedAt, info)
+		dbSecret.CreatedAt, dbSecret.UpdatedAt, dbSecret.Version, info)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create text secret: %w", err)
 	}
@@ -209,7 +209,7 @@ func (s *Storage) ListSecrets(ctx context.Context, userID string) ([]*text.Secre
 	var dbSecrets []textrepo.Secret
 
 	err := pgutils.WithRetry(func() error {
-		query := `SELECT id, name, user_id, created_at, updated_at, metadata, location, checksum
+		query := `SELECT id, name, user_id, created_at, updated_at, version, metadata, location, checksum
 			FROM vault_texts WHERE user_id = $1`
 
 		rows, err := s.db.QueryContext(ctx, query, userID)
@@ -222,7 +222,7 @@ func (s *Storage) ListSecrets(ctx context.Context, userID string) ([]*text.Secre
 			var dbSecret textrepo.Secret
 
 			err := rows.Scan(&dbSecret.ID, &dbSecret.Name, &dbSecret.UserID, &dbSecret.CreatedAt,
-				&dbSecret.UpdatedAt, &dbSecret.Metadata, &dbSecret.Location, &dbSecret.Checksum)
+				&dbSecret.UpdatedAt, &dbSecret.Version, &dbSecret.Metadata, &dbSecret.Location, &dbSecret.Checksum)
 			if err != nil {
 				return fmt.Errorf("rows.Scan: %w", err)
 			}
@@ -253,7 +253,7 @@ func (s *Storage) ListSecrets(ctx context.Context, userID string) ([]*text.Secre
 		info := text.NewContentInfo("", "", dbSecret.Location, dbSecret.Checksum)
 
 		secret, err := text.NewSecret(dbSecret.ID, dbSecret.Name, dbSecret.UserID, metadata,
-			dbSecret.CreatedAt, dbSecret.UpdatedAt, info)
+			dbSecret.CreatedAt, dbSecret.UpdatedAt, dbSecret.Version, info)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create text secret: %w", err)
 		}
@@ -268,10 +268,10 @@ func (s *Storage) ListSecrets(ctx context.Context, userID string) ([]*text.Secre
 func (s *Storage) UpdateSecret(ctx context.Context, secret *text.Secret) (*text.Secret, error) {
 	err := pgutils.WithRetry(func() error {
 		query := `UPDATE vault_texts
-			SET updated_at = $1, metadata = $2, salt = $3, iv = $4, location = $5, checksum = $6
-			WHERE user_id = $7 AND name = $8`
+			SET updated_at = $1, version = $2, metadata = $3, salt = $4, iv = $5, location = $6, checksum = $7
+			WHERE user_id = $8 AND name = $9`
 
-		_, err := s.db.ExecContext(ctx, query, secret.UpdatedAt(), secret.Metadata(),
+		_, err := s.db.ExecContext(ctx, query, secret.UpdatedAt(), secret.Version(), secret.Metadata(),
 			secret.ContentInfo().Salt(), secret.ContentInfo().IV(), secret.ContentInfo().Location(),
 			secret.ContentInfo().Checksum(), secret.UserID(), secret.Name())
 		if err != nil {

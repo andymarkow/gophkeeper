@@ -10,4 +10,5 @@ type Secret struct {
 	Data      string
 	CreatedAt time.Time
 	UpdatedAt time.Time
+	Version   int
 }

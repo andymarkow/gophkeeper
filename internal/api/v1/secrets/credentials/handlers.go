@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -115,9 +116,11 @@ func (h *Handlers) processCreateSecretRequest(ctx context.Context, userID string
 	return &Secret{
 		ID:        secret.ID(),
 		Name:      secret.Name(),
+		UserID:    secret.UserID(),
 		Metadata:  secret.Metadata(),
 		CreatedAt: secret.CreatedAt(),
 		UpdatedAt: secret.UpdatedAt(),
+		Version:   secret.Version(),
 		Data: &Data{
 			Login:    data.Login(),
 			Password: data.Password(),
@@ -161,9 +164,11 @@ func (h *Handlers) processListSecretsRequest(ctx context.Context, userID string)
 		resp.Secrets = append(resp.Secrets, &Secret{
 			ID:        secret.ID(),
 			Name:      secret.Name(),
+			UserID:    secret.UserID(),
 			Metadata:  secret.Metadata(),
 			CreatedAt: secret.CreatedAt(),
 			UpdatedAt: secret.UpdatedAt(),
+			Version:   secret.Version(),
 		})
 	}
 
@@ -225,9 +230,11 @@ func (h *Handlers) processGetSecretRequest(ctx context.Context, userID, secretNa
 	return &Secret{
 		ID:        secret.ID(),
 		Name:      secret.Name(),
+		UserID:    secret.UserID(),
 		Metadata:  secret.Metadata(),
 		CreatedAt: secret.CreatedAt(),
 		UpdatedAt: secret.UpdatedAt(),
+		Version:   secret.Version(),
 		Data: &Data{
 			Login:    secret.Data().Login(),
 			Password: secret.Data().Password(),
@@ -261,7 +268,7 @@ func (h *Handlers) UpdateSecret(w http.ResponseWriter, req *http.Request) {
 
 	defer req.Body.Close()
 
-	resp, httpErr := h.processUpdateSecretRequest(req.Context(), userID, secretName, payload)
+	resp, httpErr := h.processUpdateSecretRequest(req.Context(), userID, secretName, &payload)
 	if httpErr != nil {
 		httperr.HandleError(w, httpErr)
 
@@ -271,7 +278,7 @@ func (h *Handlers) UpdateSecret(w http.ResponseWriter, req *http.Request) {
 	api.JSONResponse(w, http.StatusAccepted, resp)
 }
 
-func (h *Handlers) processUpdateSecretRequest(ctx context.Context, userID, secretName string, payload UpdateSecretRequest) (*Secret, *httperr.HTTPError) {
+func (h *Handlers) processUpdateSecretRequest(ctx context.Context, userID, secretName string, payload *UpdateSecretRequest) (*Secret, *httperr.HTTPError) {
 	currSecret, err := h.storage.GetSecret(ctx, userID, secretName)
 	if err != nil {
 		if errors.Is(err, credrepo.ErrSecretNotFound) {
@@ -283,31 +290,17 @@ func (h *Handlers) processUpdateSecretRequest(ctx context.Context, userID, secre
 		return nil, httperr.NewHTTPError(http.StatusInternalServerError, err)
 	}
 
-	data, err := credential.NewData(payload.Data.Login, payload.Data.Password)
+	secret, err := h.processSecretChanges(currSecret, payload)
 	if err != nil {
-		h.log.Error("failed to create credential secret data", slog.Any("error", err))
+		h.log.Error("failed to process bank card secret changes", slog.Any("error", err))
 
 		return nil, httperr.NewHTTPError(http.StatusBadRequest, err)
 	}
 
-	encData, err := data.Encrypt(h.cryptoKey)
-	if err != nil {
-		h.log.Error("failed to encrypt credential secret data", slog.Any("error", err))
+	secret.SetUpdatedAt(time.Now())
+	secret.IncVersion()
 
-		return nil, httperr.NewHTTPError(http.StatusInternalServerError, err)
-	}
-
-	currSecret.AddMetadata(payload.Metadata)
-
-	secretObj, err := credential.NewSecret(
-		currSecret.ID(), secretName, userID, currSecret.Metadata(), currSecret.CreatedAt(), time.Now(), encData)
-	if err != nil {
-		h.log.Error("failed to create credential secret", slog.Any("error", err))
-
-		return nil, httperr.NewHTTPError(http.StatusBadRequest, err)
-	}
-
-	secret, err := h.storage.UpdateSecret(ctx, secretObj)
+	updSecret, err := h.storage.UpdateSecret(ctx, secret)
 	if err != nil {
 		if errors.Is(err, credrepo.ErrSecretNotFound) {
 			return nil, httperr.NewHTTPError(http.StatusNotFound, err)
@@ -318,7 +311,7 @@ func (h *Handlers) processUpdateSecretRequest(ctx context.Context, userID, secre
 		return nil, httperr.NewHTTPError(http.StatusInternalServerError, err)
 	}
 
-	decData, err := secret.Data().Decrypt(h.cryptoKey)
+	decData, err := updSecret.Data().Decrypt(h.cryptoKey)
 	if err != nil {
 		h.log.Error("failed to decrypt credential secret data", slog.Any("error", err))
 
@@ -326,16 +319,54 @@ func (h *Handlers) processUpdateSecretRequest(ctx context.Context, userID, secre
 	}
 
 	return &Secret{
-		ID:        secret.ID(),
-		Name:      secret.Name(),
-		Metadata:  secret.Metadata(),
-		CreatedAt: secret.CreatedAt(),
-		UpdatedAt: secret.UpdatedAt(),
+		ID:        updSecret.ID(),
+		Name:      updSecret.Name(),
+		UserID:    updSecret.UserID(),
+		Metadata:  updSecret.Metadata(),
+		CreatedAt: updSecret.CreatedAt(),
+		UpdatedAt: updSecret.UpdatedAt(),
+		Version:   updSecret.Version(),
 		Data: &Data{
 			Login:    decData.Login(),
 			Password: decData.Password(),
 		},
 	}, nil
+}
+
+func (h *Handlers) processSecretChanges(secret *credential.Secret, req *UpdateSecretRequest) (*credential.Secret, error) {
+	if req == nil {
+		return secret, nil
+	}
+
+	if req.Metadata != nil {
+		secret.SetMetadata(req.Metadata)
+	}
+
+	if req.Data == nil {
+		return secret, nil
+	}
+
+	data, err := secret.Data().Decrypt(h.cryptoKey)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decrypt secret data: %w", err)
+	}
+
+	if req.Data.Login != "" {
+		data.SetLogin(req.Data.Login)
+	}
+
+	if req.Data.Password != "" {
+		data.SetPassword(req.Data.Password)
+	}
+
+	encData, err := data.Encrypt(h.cryptoKey)
+	if err != nil {
+		return nil, fmt.Errorf("failed to encrypt secret data: %w", err)
+	}
+
+	secret.SetData(encData)
+
+	return secret, nil
 }
 
 // DeleteSecret handles delete credential secret request.

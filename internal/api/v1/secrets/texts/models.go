@@ -8,9 +8,11 @@ import "time"
 type Secret struct {
 	ID        string            `json:"id,omitempty"`
 	Name      string            `json:"name,omitempty"`
+	UserID    string            `json:"user_id,omitempty"`
 	Metadata  map[string]string `json:"metadata,omitempty"`
 	CreatedAt time.Time         `json:"created_at,omitempty"`
 	UpdatedAt time.Time         `json:"updated_at,omitempty"`
+	Version   int               `json:"version,omitempty"`
 	Content   *Content          `json:"content,omitempty"`
 }
 

@@ -19,6 +19,7 @@ type Secret struct {
 	metadata  map[string]string
 	createdAt time.Time
 	updatedAt time.Time
+	version   int
 	data      *Data
 }
 
@@ -30,14 +31,6 @@ type Data struct {
 
 // NewData creates a new data for the credential secret.
 func NewData(login, password string) (*Data, error) {
-	if login == "" {
-		return nil, fmt.Errorf("login must not be empty")
-	}
-
-	if password == "" {
-		return nil, fmt.Errorf("password must not be empty")
-	}
-
 	return &Data{
 		login:    login,
 		password: password,
@@ -50,7 +43,7 @@ func NewEmptyData() *Data {
 }
 
 // NewSecret creates a new credential.
-func NewSecret(id, name, userID string, metadata map[string]string, createdAt, updatedAt time.Time, data *Data) (*Secret, error) {
+func NewSecret(id, name, userID string, metadata map[string]string, createdAt, updatedAt time.Time, version int, data *Data) (*Secret, error) {
 	if id == "" {
 		return nil, fmt.Errorf("id must not be empty")
 	}
@@ -78,6 +71,7 @@ func NewSecret(id, name, userID string, metadata map[string]string, createdAt, u
 		metadata:  metadata,
 		createdAt: createdAt,
 		updatedAt: updatedAt,
+		version:   version,
 		data:      data,
 	}, nil
 }
@@ -88,7 +82,7 @@ func CreateSecret(name, userID string, metadata map[string]string, data *Data) (
 		data = NewEmptyData()
 	}
 
-	return NewSecret(uuid.New().String(), name, userID, metadata, time.Now(), time.Now(), data)
+	return NewSecret(uuid.New().String(), name, userID, metadata, time.Now(), time.Now(), 1, data)
 }
 
 // ID returns the id of the credential secret.
@@ -111,8 +105,8 @@ func (s *Secret) Metadata() map[string]string {
 	return s.metadata
 }
 
-// AddMetadata adds metadata to the credential secret.
-func (s *Secret) AddMetadata(metadata map[string]string) {
+// SetMetadata adds metadata to the bank card secret.
+func (s *Secret) SetMetadata(metadata map[string]string) {
 	s.metadata = metadata
 }
 
@@ -138,6 +132,21 @@ func (s *Secret) CreatedAt() time.Time {
 // UpdatedAt returns the update at of the credential secret.
 func (s *Secret) UpdatedAt() time.Time {
 	return s.updatedAt
+}
+
+// SetUpdatedAt sets the update at of the credential secret.
+func (s *Secret) SetUpdatedAt(t time.Time) {
+	s.updatedAt = t
+}
+
+// Version returns the version of the credential secret.
+func (s *Secret) Version() int {
+	return s.version
+}
+
+// IncVersion increments the version of the credential secret.
+func (s *Secret) IncVersion() {
+	s.version++
 }
 
 // Data returns the data of the credential.
@@ -174,9 +183,19 @@ func (d *Data) Login() string {
 	return d.login
 }
 
+// SetLogin sets the login of the credential.
+func (d *Data) SetLogin(login string) {
+	d.login = login
+}
+
 // Password returns the password of the credential.
 func (d *Data) Password() string {
 	return d.password
+}
+
+// SetPassword sets the password of the credential.
+func (d *Data) SetPassword(password string) {
+	d.password = password
 }
 
 // Encrypt encrypts credential data with the given key.

@@ -135,10 +135,11 @@ func (s *SecretService) UpdateSecret(ctx context.Context, userID, secretName str
 	}
 
 	if metadata != nil {
-		secret.AddMetadata(metadata)
+		secret.SetMetadata(metadata)
 	}
 
 	secret.SetUpdatedAt(time.Now())
+	secret.IncVersion()
 
 	// Update the secret entry in the DB storage.
 	secr, err := s.dbStorage.UpdateSecret(ctx, secret)
@@ -147,36 +148,6 @@ func (s *SecretService) UpdateSecret(ctx context.Context, userID, secretName str
 	}
 
 	return secr, nil
-}
-
-// DeleteSecret deletes a secret entry from the DB storage and the object storage.
-func (s *SecretService) DeleteSecret(ctx context.Context, userID, secretName string) error {
-	secret, err := s.dbStorage.GetSecret(ctx, userID, secretName)
-	if err != nil {
-		if errors.Is(err, textrepo.ErrSecretNotFound) {
-			return ErrSecretEntryNotFound
-		}
-
-		return fmt.Errorf("storage.GetSecret: %w", err)
-	}
-
-	objName := s.getObjName(userID, secret.ID())
-
-	err = s.objStorage.RemoveObject(ctx, objName)
-	if err != nil {
-		return fmt.Errorf("storage.RemoveObject: %w", err)
-	}
-
-	err = s.dbStorage.DeleteSecret(ctx, userID, secretName)
-	if err != nil {
-		if errors.Is(err, textrepo.ErrSecretNotFound) {
-			return ErrSecretEntryNotFound
-		}
-
-		return fmt.Errorf("storage.DeleteSecret: %w", err)
-	}
-
-	return nil
 }
 
 // UploadSecret uploads a secret data to the object storage.
@@ -216,6 +187,7 @@ func (s *SecretService) UploadSecret(ctx context.Context, userID, secretName str
 
 	secret.SetContentInfo(contInfo)
 	secret.SetUpdatedAt(time.Now())
+	secret.IncVersion()
 
 	updFile, err := s.dbStorage.UpdateSecret(ctx, secret)
 	if err != nil {
@@ -271,6 +243,36 @@ func (s *SecretService) DownloadSecret(ctx context.Context, userID, secretName s
 	}
 
 	return secret, stream, nil
+}
+
+// DeleteSecret deletes a secret entry from the DB storage and the object storage.
+func (s *SecretService) DeleteSecret(ctx context.Context, userID, secretName string) error {
+	secret, err := s.dbStorage.GetSecret(ctx, userID, secretName)
+	if err != nil {
+		if errors.Is(err, textrepo.ErrSecretNotFound) {
+			return ErrSecretEntryNotFound
+		}
+
+		return fmt.Errorf("storage.GetSecret: %w", err)
+	}
+
+	objName := s.getObjName(userID, secret.ID())
+
+	err = s.objStorage.RemoveObject(ctx, objName)
+	if err != nil {
+		return fmt.Errorf("storage.RemoveObject: %w", err)
+	}
+
+	err = s.dbStorage.DeleteSecret(ctx, userID, secretName)
+	if err != nil {
+		if errors.Is(err, textrepo.ErrSecretNotFound) {
+			return ErrSecretEntryNotFound
+		}
+
+		return fmt.Errorf("storage.DeleteSecret: %w", err)
+	}
+
+	return nil
 }
 
 // getObjName returns the object name for the given user and secret ID.

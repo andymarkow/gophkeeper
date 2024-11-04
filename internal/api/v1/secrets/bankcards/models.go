@@ -4,22 +4,28 @@ package bankcards
 import "time"
 
 type Secret struct {
-	// ID represents bank card ID.
+	// ID represents secret ID.
 	ID string `json:"id"`
 
-	// Name represents bank card name.
+	// Name represents secret name.
 	Name string `json:"name"`
 
-	// Metadata represents bank card metadata.
+	// UserID represents secret user ID.
+	UserID string `json:"user_id,omitempty"`
+
+	// Metadata represents secret metadata.
 	Metadata map[string]string `json:"metadata,omitempty"`
 
-	// CreatedAt represents bank card create at.
+	// CreatedAt represents secret create at.
 	CreatedAt time.Time `json:"created_at,omitempty"`
 
-	// UpdatedAt represents bank card update at.
+	// UpdatedAt represents secret update at.
 	UpdatedAt time.Time `json:"updated_at,omitempty"`
 
-	// Data represents bank card data.
+	// Version represents secret version.
+	Version int `json:"version,omitempty"`
+
+	// Data represents secret data.
 	Data *Data `json:"data,omitempty"`
 }
 

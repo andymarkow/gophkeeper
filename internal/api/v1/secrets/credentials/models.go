@@ -6,22 +6,28 @@ import "time"
 //
 //nolint:tagliatelle
 type Secret struct {
-	// ID represents credential id.
+	// ID represents secret id.
 	ID string `json:"id"`
 
-	// Name represents credential name.
+	// Name represents secret name.
 	Name string `json:"name"`
 
-	// Metadata represents credential metadata.
+	// UserID represents secret user ID.
+	UserID string `json:"user_id,omitempty"`
+
+	// Metadata represents secret metadata.
 	Metadata map[string]string `json:"metadata,omitempty"`
 
-	// CreatedAt represents credential creation time.
+	// CreatedAt represents secret creation time.
 	CreatedAt time.Time `json:"created_at,omitempty"`
 
-	// UpdatedAt represents credential update time.
+	// UpdatedAt represents secret update time.
 	UpdatedAt time.Time `json:"updated_at,omitempty"`
 
-	// Data represents credential data.
+	// Version represents secret version.
+	Version int `json:"version,omitempty"`
+
+	// Data represents secret data.
 	Data *Data `json:"data,omitempty"`
 }
 

@@ -93,9 +93,11 @@ func (h *Handlers) processCreateSecretRequest(ctx context.Context, userID, secre
 		&Secret{
 			ID:        secret.ID(),
 			Name:      secret.Name(),
+			UserID:    secret.UserID(),
 			Metadata:  secret.Metadata(),
 			CreatedAt: secret.CreatedAt(),
 			UpdatedAt: secret.UpdatedAt(),
+			Version:   secret.Version(),
 			File: &File{
 				Name:     secret.ContentInfo().FileName(),
 				Size:     secret.ContentInfo().Size(),
@@ -158,9 +160,11 @@ func (h *Handlers) processUpdateSecretRequest(ctx context.Context, userID, secre
 		&Secret{
 			ID:        secret.ID(),
 			Name:      secret.Name(),
+			UserID:    secret.UserID(),
 			Metadata:  secret.Metadata(),
 			CreatedAt: secret.CreatedAt(),
 			UpdatedAt: secret.UpdatedAt(),
+			Version:   secret.Version(),
 			File: &File{
 				Name:     secret.ContentInfo().FileName(),
 				Size:     secret.ContentInfo().Size(),
@@ -206,9 +210,11 @@ func (h *Handlers) processListSecretsRequest(ctx context.Context, userID string)
 		resp.Secrets = append(resp.Secrets, &Secret{
 			ID:        secret.ID(),
 			Name:      secret.Name(),
+			UserID:    secret.UserID(),
 			Metadata:  secret.Metadata(),
 			CreatedAt: secret.CreatedAt(),
 			UpdatedAt: secret.UpdatedAt(),
+			Version:   secret.Version(),
 			File: &File{
 				Name:     secret.ContentInfo().FileName(),
 				Size:     secret.ContentInfo().Size(),
@@ -266,9 +272,11 @@ func (h *Handlers) processGetSecretRequest(ctx context.Context, userID, secretNa
 	return &Secret{
 		ID:        secret.ID(),
 		Name:      secret.Name(),
+		UserID:    secret.UserID(),
 		Metadata:  secret.Metadata(),
 		CreatedAt: secret.CreatedAt(),
 		UpdatedAt: secret.UpdatedAt(),
+		Version:   secret.Version(),
 		File: &File{
 			Name:     secret.ContentInfo().FileName(),
 			Size:     secret.ContentInfo().Size(),
@@ -333,9 +341,11 @@ func (h *Handlers) processUploadSecretRequest(ctx context.Context, userID, secre
 	return &Secret{
 		ID:        secret.ID(),
 		Name:      secret.Name(),
+		UserID:    secret.UserID(),
 		Metadata:  secret.Metadata(),
 		CreatedAt: secret.CreatedAt(),
 		UpdatedAt: secret.UpdatedAt(),
+		Version:   secret.Version(),
 		File: &File{
 			Name:     secret.ContentInfo().FileName(),
 			Size:     secret.ContentInfo().Size(),

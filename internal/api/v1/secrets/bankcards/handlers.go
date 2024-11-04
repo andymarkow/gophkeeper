@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -115,9 +116,11 @@ func (h *Handlers) processCreateSecretRequest(ctx context.Context, userID string
 	return &Secret{
 		ID:        secr.ID(),
 		Name:      secr.Name(),
+		UserID:    secr.UserID(),
 		Metadata:  secr.Metadata(),
 		CreatedAt: secr.CreatedAt(),
 		UpdatedAt: secr.UpdatedAt(),
+		Version:   secr.Version(),
 		Data: &Data{
 			Number:   data.Number(),
 			Name:     data.Name(),
@@ -179,9 +182,11 @@ func (h *Handlers) processGetSecretRequest(ctx context.Context, userID, secretNa
 	return &Secret{
 		ID:        secret.ID(),
 		Name:      secret.Name(),
+		UserID:    secret.UserID(),
 		Metadata:  secret.Metadata(),
 		CreatedAt: secret.CreatedAt(),
 		UpdatedAt: secret.UpdatedAt(),
+		Version:   secret.Version(),
 		Data: &Data{
 			Number:   secret.Data().Number(),
 			Name:     secret.Data().Name(),
@@ -227,9 +232,11 @@ func (h *Handlers) processListSecretsRequest(ctx context.Context, userID string)
 		resp.Secrets = append(resp.Secrets, &Secret{
 			ID:        secret.ID(),
 			Name:      secret.Name(),
+			UserID:    secret.UserID(),
 			Metadata:  secret.Metadata(),
 			CreatedAt: secret.CreatedAt(),
 			UpdatedAt: secret.UpdatedAt(),
+			Version:   secret.Version(),
 		})
 	}
 
@@ -289,32 +296,17 @@ func (h *Handlers) processUpdateSecretRequest(ctx context.Context, userID, secre
 		return nil, httperr.NewHTTPError(http.StatusInternalServerError, err)
 	}
 
-	// Read bank card data from the payload.
-	data, err := bankcard.CreateData(payload.Data.Number, payload.Data.Name, payload.Data.CVV, payload.Data.ExpireAt)
+	secret, err := h.processSecretChanges(currSecret, payload)
 	if err != nil {
-		h.log.Error("failed to create bank card secret data", slog.Any("error", err))
+		h.log.Error("failed to process bank card secret changes", slog.Any("error", err))
 
 		return nil, httperr.NewHTTPError(http.StatusBadRequest, err)
 	}
 
-	// Encrypt bank card data from the payload.
-	encData, err := data.Encrypt(h.cryptoKey)
-	if err != nil {
-		h.log.Error("failed to encrypt bank card secret data", slog.Any("error", err))
+	secret.SetUpdatedAt(time.Now())
+	secret.IncVersion()
 
-		return nil, httperr.NewHTTPError(http.StatusInternalServerError, err)
-	}
-
-	currSecret.AddMetadata(payload.Metadata)
-
-	secret, err := bankcard.NewSecret(currSecret.ID(), secretName, userID, currSecret.Metadata(), currSecret.CreatedAt(), time.Now(), encData)
-	if err != nil {
-		h.log.Error("failed to create bank card secret", slog.Any("error", err))
-
-		return nil, httperr.NewHTTPError(http.StatusBadRequest, err)
-	}
-
-	secr, err := h.storage.UpdateSecret(ctx, secret)
+	updSecret, err := h.storage.UpdateSecret(ctx, secret)
 	if err != nil {
 		if errors.Is(err, cardrepo.ErrSecretNotFound) {
 			h.log.Error("failed to update bank card secret entry in storage", slog.Any("error", err))
@@ -327,19 +319,72 @@ func (h *Handlers) processUpdateSecretRequest(ctx context.Context, userID, secre
 		return nil, httperr.NewHTTPError(http.StatusInternalServerError, err)
 	}
 
+	decData, err := updSecret.Data().Decrypt(h.cryptoKey)
+	if err != nil {
+		h.log.Error("failed to decrypt bank card secret data", slog.Any("error", err))
+
+		return nil, httperr.NewHTTPError(http.StatusInternalServerError, err)
+	}
+
 	return &Secret{
-		ID:        secr.ID(),
-		Name:      secr.Name(),
-		Metadata:  secr.Metadata(),
-		CreatedAt: secr.CreatedAt(),
-		UpdatedAt: secr.UpdatedAt(),
+		ID:        updSecret.ID(),
+		Name:      updSecret.Name(),
+		UserID:    updSecret.UserID(),
+		Metadata:  updSecret.Metadata(),
+		CreatedAt: updSecret.CreatedAt(),
+		UpdatedAt: updSecret.UpdatedAt(),
+		Version:   updSecret.Version(),
 		Data: &Data{
-			Name:     data.Name(),
-			Number:   data.Number(),
-			CVV:      data.CVV(),
-			ExpireAt: data.ExpireAt(),
+			Name:     decData.Name(),
+			Number:   decData.Number(),
+			CVV:      decData.CVV(),
+			ExpireAt: decData.ExpireAt(),
 		},
 	}, nil
+}
+
+func (h *Handlers) processSecretChanges(secret *bankcard.Secret, req *UpdateSecretRequest) (*bankcard.Secret, error) {
+	if req == nil {
+		return secret, nil
+	}
+
+	if req.Metadata != nil {
+		secret.SetMetadata(req.Metadata)
+	}
+
+	if req.Data == nil {
+		return secret, nil
+	}
+
+	data, err := secret.Data().Decrypt(h.cryptoKey)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decrypt secret data: %w", err)
+	}
+
+	if req.Data.Number != "" {
+		data.SetNumber(req.Data.Number)
+	}
+
+	if req.Data.Name != "" {
+		data.SetName(req.Data.Name)
+	}
+
+	if req.Data.CVV != "" {
+		data.SetCVV(req.Data.CVV)
+	}
+
+	if req.Data.ExpireAt != "" {
+		data.SetExpireAt(req.Data.ExpireAt)
+	}
+
+	encData, err := data.Encrypt(h.cryptoKey)
+	if err != nil {
+		return nil, fmt.Errorf("failed to encrypt secret data: %w", err)
+	}
+
+	secret.SetData(encData)
+
+	return secret, nil
 }
 
 // DeleteSecret handles delete bank card secret request.

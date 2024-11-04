@@ -140,11 +140,11 @@ func (s *Storage) AddSecret(ctx context.Context, secret *bankcard.Secret) (*bank
 
 	err = pgutils.WithRetry(func() error {
 		query := `INSERT INTO vault_bankcards
-			(id, name, user_id, created_at, updated_at, metadata, data)
-			VALUES ($1, $2, $3, $4, $5, $6, $7)`
+			(id, name, user_id, created_at, updated_at, version, metadata, data)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`
 
 		if _, err := s.db.ExecContext(ctx, query,
-			secret.ID(), secret.Name(), secret.UserID(), secret.CreatedAt(), secret.UpdatedAt(), metadata, data); err != nil {
+			secret.ID(), secret.Name(), secret.UserID(), secret.CreatedAt(), secret.UpdatedAt(), secret.Version(), metadata, data); err != nil {
 			var pgErr *pgconn.PgError
 			if errors.As(err, &pgErr) && pgerrcode.IsIntegrityConstraintViolation(pgErr.Code) {
 				return cardrepo.ErrSecretAlreadyExists
@@ -172,13 +172,13 @@ func (s *Storage) GetSecret(ctx context.Context, userID, secretName string) (*ba
 	var dbSecret cardrepo.Secret
 
 	err := pgutils.WithRetry(func() error {
-		query := `SELECT id, name, user_id, created_at, updated_at, metadata, data
+		query := `SELECT id, name, user_id, created_at, updated_at, version, metadata, data
 			FROM vault_bankcards WHERE user_id = $1 AND name = $2`
 
 		row := s.db.QueryRowContext(ctx, query, userID, secretName)
 
 		err := row.Scan(&dbSecret.ID, &dbSecret.Name, &dbSecret.UserID, &dbSecret.CreatedAt,
-			&dbSecret.UpdatedAt, &dbSecret.Metadata, &dbSecret.Data)
+			&dbSecret.UpdatedAt, &dbSecret.Version, &dbSecret.Metadata, &dbSecret.Data)
 		if err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
 				return cardrepo.ErrSecretNotFound
@@ -206,7 +206,7 @@ func (s *Storage) GetSecret(ctx context.Context, userID, secretName string) (*ba
 	}
 
 	secret, err := bankcard.NewSecret(dbSecret.ID, dbSecret.Name, dbSecret.UserID, metadata,
-		dbSecret.CreatedAt, dbSecret.UpdatedAt, data)
+		dbSecret.CreatedAt, dbSecret.UpdatedAt, dbSecret.Version, data)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create bank card secret: %w", err)
 	}
@@ -219,7 +219,7 @@ func (s *Storage) ListSecrets(ctx context.Context, userID string) ([]*bankcard.S
 	var dbSecrets []cardrepo.Secret
 
 	err := pgutils.WithRetry(func() error {
-		query := `SELECT id, name, user_id, created_at, updated_at, metadata
+		query := `SELECT id, name, user_id, created_at, updated_at, version, metadata
 			FROM vault_bankcards WHERE user_id = $1`
 
 		rows, err := s.db.QueryContext(ctx, query, userID)
@@ -232,7 +232,7 @@ func (s *Storage) ListSecrets(ctx context.Context, userID string) ([]*bankcard.S
 			var dbSecret cardrepo.Secret
 
 			if err := rows.Scan(&dbSecret.ID, &dbSecret.Name, &dbSecret.UserID, &dbSecret.CreatedAt,
-				&dbSecret.UpdatedAt, &dbSecret.Metadata); err != nil {
+				&dbSecret.UpdatedAt, &dbSecret.Version, &dbSecret.Metadata); err != nil {
 				return fmt.Errorf("rows.Scan: %w", err)
 			}
 
@@ -260,7 +260,7 @@ func (s *Storage) ListSecrets(ctx context.Context, userID string) ([]*bankcard.S
 		}
 
 		secret, err := bankcard.NewSecret(dbSecret.ID, dbSecret.Name, dbSecret.UserID, metadata,
-			dbSecret.CreatedAt, dbSecret.UpdatedAt, bankcard.NewEmptyData())
+			dbSecret.CreatedAt, dbSecret.UpdatedAt, dbSecret.Version, bankcard.NewEmptyData())
 		if err != nil {
 			return nil, fmt.Errorf("failed to create bank card secret: %w", err)
 		}
@@ -285,10 +285,10 @@ func (s *Storage) UpdateSecret(ctx context.Context, secret *bankcard.Secret) (*b
 
 	err = pgutils.WithRetry(func() error {
 		query := `UPDATE vault_bankcards
-			SET metadata = $1, data = $2, updated_at = $3
-			WHERE user_id = $4 AND name = $5`
+			SET updated_at = $1, version = $2, metadata = $3, data = $4
+			WHERE user_id = $5 AND name = $6`
 
-		_, err := s.db.ExecContext(ctx, query, metadata, data, secret.UpdatedAt(), secret.UserID(), secret.Name())
+		_, err := s.db.ExecContext(ctx, query, secret.UpdatedAt(), secret.Version(), metadata, data, secret.UserID(), secret.Name())
 		if err != nil {
 			return fmt.Errorf("db.ExecContext: %w", err)
 		}

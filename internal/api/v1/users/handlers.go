@@ -48,9 +48,9 @@ func WithLogger(log *slog.Logger) Option {
 	}
 }
 
-// CreateUser creates a new user.
-func (h *Handlers) CreateUser(w http.ResponseWriter, req *http.Request) {
-	var payload CreateUserRequest
+// SignUpUser creates a new user.
+func (h *Handlers) SignUpUser(w http.ResponseWriter, req *http.Request) {
+	var payload SignUpUserRequest
 
 	if err := json.NewDecoder(req.Body).Decode(&payload); err != nil {
 		if errors.Is(err, io.EOF) {
@@ -70,7 +70,7 @@ func (h *Handlers) CreateUser(w http.ResponseWriter, req *http.Request) {
 
 	usr, err := user.CreateUser(payload.Login, payload.Password)
 	if err != nil {
-		h.log.Error("user.CreateUser", slog.Any("error", err))
+		h.log.Error("user.SignUp", slog.Any("error", err))
 		httperr.HandleError(w, httperr.NewHTTPError(http.StatusBadRequest, err))
 
 		return
@@ -83,7 +83,7 @@ func (h *Handlers) CreateUser(w http.ResponseWriter, req *http.Request) {
 			return
 		}
 
-		h.log.Error("storage.CreateUser", slog.Any("error", err))
+		h.log.Error("storage.SignUp", slog.Any("error", err))
 		httperr.HandleError(w, httperr.NewHTTPError(http.StatusInternalServerError, err))
 
 		return
@@ -97,12 +97,12 @@ func (h *Handlers) CreateUser(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	api.JSONResponse(w, http.StatusCreated, CreateUserResponse{Token: token})
+	api.JSONResponse(w, http.StatusCreated, SignUpUserResponse{ID: usr.ID(), Token: token})
 }
 
-// LoginUser logs in a user.
-func (h *Handlers) LoginUser(w http.ResponseWriter, req *http.Request) {
-	var payload LoginUserRequest
+// SignInUser logs in a user.
+func (h *Handlers) SignInUser(w http.ResponseWriter, req *http.Request) {
+	var payload SignInUserRequest
 
 	if err := json.NewDecoder(req.Body).Decode(&payload); err != nil {
 		if errors.Is(err, io.EOF) {
@@ -157,5 +157,5 @@ func (h *Handlers) LoginUser(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	api.JSONResponse(w, http.StatusOK, LoginUserResponse{Token: token})
+	api.JSONResponse(w, http.StatusOK, SignInUserResponse{ID: usr.ID(), Token: token})
 }

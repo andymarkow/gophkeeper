@@ -16,6 +16,7 @@ type Secret struct {
 	metadata  map[string]string
 	createdAt time.Time
 	updatedAt time.Time
+	version   int
 	info      *ContentInfo
 }
 
@@ -43,7 +44,7 @@ func NewContentInfo(salt, iv, fileName, location, checksum string, size int64) *
 
 // NewSecret creates a new file object.
 func NewSecret(id, name, userID string, metadata map[string]string,
-	createdAt, updatedAt time.Time, info *ContentInfo) (*Secret, error) {
+	createdAt, updatedAt time.Time, version int, info *ContentInfo) (*Secret, error) {
 	if id == "" {
 		return nil, fmt.Errorf("secret ID must not be empty")
 	}
@@ -71,13 +72,14 @@ func NewSecret(id, name, userID string, metadata map[string]string,
 		metadata:  metadata,
 		createdAt: createdAt,
 		updatedAt: updatedAt,
+		version:   version,
 		info:      info,
 	}, nil
 }
 
 // CreateSecret creates a new file secret object.
 func CreateSecret(name, userID string, metadata map[string]string) (*Secret, error) {
-	return NewSecret(uuid.New().String(), name, userID, metadata, time.Now(), time.Now(), nil)
+	return NewSecret(uuid.New().String(), name, userID, metadata, time.Now(), time.Now(), 0, nil)
 }
 
 // ID returns the id of the secret.
@@ -105,11 +107,9 @@ func (s *Secret) Metadata() map[string]string {
 	return s.metadata
 }
 
-// AddMetadata adds metadata to the secret.
-func (s *Secret) AddMetadata(metadata map[string]string) {
-	for k, v := range metadata {
-		s.metadata[k] = v
-	}
+// SetMetadata adds metadata to the bank card secret.
+func (s *Secret) SetMetadata(metadata map[string]string) {
+	s.metadata = metadata
 }
 
 // CreatedAt returns the created at time of the secret.
@@ -123,8 +123,18 @@ func (s *Secret) UpdatedAt() time.Time {
 }
 
 // SetUpdatedAt sets the updated at time of the secret.
-func (s *Secret) SetUpdatedAt(tm time.Time) {
-	s.updatedAt = tm
+func (s *Secret) SetUpdatedAt(t time.Time) {
+	s.updatedAt = t
+}
+
+// Version returns the version of the secret.
+func (s *Secret) Version() int {
+	return s.version
+}
+
+// IncVersion increments the version of the secret.
+func (s *Secret) IncVersion() {
+	s.version++
 }
 
 // ContentInfo returns the content info of the secret.

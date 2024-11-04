@@ -20,6 +20,7 @@ type Secret struct {
 	metadata  map[string]string
 	createdAt time.Time
 	updatedAt time.Time
+	version   int
 	data      *Data
 }
 
@@ -78,7 +79,7 @@ func NewEmptyData() *Data {
 }
 
 // NewSecret creates a new bank card.
-func NewSecret(id, name, userID string, metadata map[string]string, createdAt, updatedAt time.Time, data *Data) (*Secret, error) {
+func NewSecret(id, name, userID string, metadata map[string]string, createdAt, updatedAt time.Time, version int, data *Data) (*Secret, error) {
 	if id == "" {
 		return nil, fmt.Errorf("id must not be empty")
 	}
@@ -106,6 +107,7 @@ func NewSecret(id, name, userID string, metadata map[string]string, createdAt, u
 		metadata:  metadata,
 		createdAt: createdAt,
 		updatedAt: updatedAt,
+		version:   version,
 		data:      data,
 	}, nil
 }
@@ -116,7 +118,7 @@ func CreateSecret(name, userID string, metadata map[string]string, data *Data) (
 		data = NewEmptyData()
 	}
 
-	return NewSecret(uuid.New().String(), name, userID, metadata, time.Now(), time.Now(), data)
+	return NewSecret(uuid.New().String(), name, userID, metadata, time.Now(), time.Now(), 1, data)
 }
 
 // ID returns the id of the bank card secret.
@@ -139,11 +141,9 @@ func (s *Secret) Metadata() map[string]string {
 	return s.metadata
 }
 
-// AddMetadata adds metadata to the bank card secret.
-func (s *Secret) AddMetadata(metadata map[string]string) {
-	for k, v := range metadata {
-		s.metadata[k] = v
-	}
+// SetMetadata adds metadata to the bank card secret.
+func (s *Secret) SetMetadata(metadata map[string]string) {
+	s.metadata = metadata
 }
 
 // MetadataJSON returns the metadata of the bank card secret.
@@ -168,6 +168,26 @@ func (s *Secret) CreatedAt() time.Time {
 // UpdatedAt returns the update at of the bank card secret.
 func (s *Secret) UpdatedAt() time.Time {
 	return s.updatedAt
+}
+
+// SetUpdatedAt sets the update at of the bank card secret.
+func (s *Secret) SetUpdatedAt(t time.Time) {
+	s.updatedAt = t
+}
+
+// Version returns the version of the bank card secret.
+func (s *Secret) Version() int {
+	return s.version
+}
+
+// SetVersion sets the version of the bank card secret.
+func (s *Secret) SetVersion(version int) {
+	s.version = version
+}
+
+// IncVersion increments the version of the bank card secret.
+func (s *Secret) IncVersion() {
+	s.version++
 }
 
 // Data returns the data of the bank card secret.
@@ -206,9 +226,19 @@ func (d *Data) Number() string {
 	return d.number
 }
 
+// SetNumber sets the number of the bank card secret.
+func (d *Data) SetNumber(number string) {
+	d.number = number
+}
+
 // Name returns the name of the bank card secret.
 func (d *Data) Name() string {
 	return d.name
+}
+
+// SetName sets the name of the bank card secret.
+func (d *Data) SetName(name string) {
+	d.name = name
 }
 
 // CVV returns the CVV of the bank card.
@@ -216,9 +246,19 @@ func (d *Data) CVV() string {
 	return d.cvv
 }
 
+// SetCVV sets the CVV of the bank card.
+func (d *Data) SetCVV(cvv string) {
+	d.cvv = cvv
+}
+
 // ExpireAt returns the expire at of the bank card.
 func (d *Data) ExpireAt() string {
 	return d.expiredAt
+}
+
+// SetExpireAt sets the expire at of the bank card.
+func (d *Data) SetExpireAt(expiredAt string) {
+	d.expiredAt = expiredAt
 }
 
 // Encrypt encrypts bank card data with the given key.

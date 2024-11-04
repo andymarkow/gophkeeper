@@ -110,7 +110,7 @@ func (s *FileService) UpdateSecret(ctx context.Context, userID, secretName, file
 	}
 
 	if metadata != nil {
-		secret.AddMetadata(metadata)
+		secret.SetMetadata(metadata)
 	}
 
 	if fileName != "" {
@@ -118,6 +118,7 @@ func (s *FileService) UpdateSecret(ctx context.Context, userID, secretName, file
 	}
 
 	secret.SetUpdatedAt(time.Now())
+	secret.IncVersion()
 
 	// Update the file object entry in the file storage.
 	f, err := s.dbStorage.UpdateSecret(ctx, secret)
@@ -172,6 +173,7 @@ func (s *FileService) UploadSecret(ctx context.Context, userID, secretName strin
 
 	secret.SetContentInfo(contInfo)
 	secret.SetUpdatedAt(time.Now())
+	secret.IncVersion()
 
 	updFile, err := s.dbStorage.UpdateSecret(ctx, secret)
 	if err != nil {
