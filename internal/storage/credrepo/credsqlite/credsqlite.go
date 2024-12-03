@@ -1,5 +1,5 @@
-// Package cardsqlite provides SQLite storage implementation for bank cards.
-package cardsqlite
+// Package credsqlite implements SQLite storage.
+package credsqlite
 
 import (
 	"context"
@@ -9,16 +9,16 @@ import (
 	"fmt"
 	"log/slog"
 
-	// SQLite driver.
 	"github.com/mattn/go-sqlite3"
 
-	"github.com/andymarkow/gophkeeper/internal/domain/vault/bankcard"
+	"github.com/andymarkow/gophkeeper/internal/domain/vault/credential"
 	"github.com/andymarkow/gophkeeper/internal/storage/cardrepo"
+	"github.com/andymarkow/gophkeeper/internal/storage/credrepo"
 )
 
-var _ cardrepo.Storage = (*Storage)(nil)
+var _ credrepo.Storage = (*Storage)(nil)
 
-// Storage implements bank card storage.
+// Storage implements SQLite storage.
 type Storage struct {
 	log *slog.Logger
 	db  *sql.DB
@@ -68,8 +68,8 @@ func (s *Storage) Ping(ctx context.Context) error {
 	return nil
 }
 
-// AddSecret adds a bank card secret entry to the storage.
-func (s *Storage) AddSecret(ctx context.Context, secret *bankcard.Secret) (*bankcard.Secret, error) {
+// AddSecret adds a credential secret entry to the storage.
+func (s *Storage) AddSecret(ctx context.Context, secret *credential.Secret) (*credential.Secret, error) {
 	metadata, err := secret.MetadataJSON()
 	if err != nil {
 		return nil, fmt.Errorf("failed to read metadata: %w", err)
@@ -80,13 +80,14 @@ func (s *Storage) AddSecret(ctx context.Context, secret *bankcard.Secret) (*bank
 		return nil, fmt.Errorf("failed to read data: %w", err)
 	}
 
-	query := `INSERT INTO vault_bankcards
+	query := `INSERT INTO vault_credentials
 			(id, name, user_id, created_at, updated_at, version, metadata, data)
 			VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`
 
 	if _, err := s.db.ExecContext(ctx, query,
 		secret.ID(), secret.Name(), secret.UserID(), secret.CreatedAt(), secret.UpdatedAt(), secret.Version(), metadata, data); err != nil {
 		var sqliteErr sqlite3.Error
+
 		if errors.As(err, &sqliteErr) && sqliteErr.Code == sqlite3.ErrNo(sqlite3.ErrConstraintUnique) {
 			return nil, cardrepo.ErrSecretAlreadyExists
 		}
@@ -102,15 +103,15 @@ func (s *Storage) AddSecret(ctx context.Context, secret *bankcard.Secret) (*bank
 	return secr, nil
 }
 
-// GetSecret gets a bank card secret entry from the storage.
-func (s *Storage) GetSecret(ctx context.Context, userID, secretName string) (*bankcard.Secret, error) {
+// GetSecret gets a credential secret entry from the storage.
+func (s *Storage) GetSecret(ctx context.Context, userID, name string) (*credential.Secret, error) {
 	query := `SELECT id, name, user_id, created_at, updated_at, version, metadata, data
-			FROM vault_bankcards
+			FROM vault_credentials
 			WHERE user_id = $1 AND name = $2`
 
 	var dbSecret cardrepo.Secret
 
-	row := s.db.QueryRowContext(ctx, query, userID, secretName)
+	row := s.db.QueryRowContext(ctx, query, userID, name)
 
 	err := row.Scan(&dbSecret.ID, &dbSecret.Name, &dbSecret.UserID, &dbSecret.CreatedAt,
 		&dbSecret.UpdatedAt, &dbSecret.Version, &dbSecret.Metadata, &dbSecret.Data)
@@ -129,24 +130,24 @@ func (s *Storage) GetSecret(ctx context.Context, userID, secretName string) (*ba
 		return nil, fmt.Errorf("failed to unmarshal metadata: %w", err)
 	}
 
-	data, err := bankcard.UnmarshalData([]byte(dbSecret.Data))
+	data, err := credential.UnmarshalData([]byte(dbSecret.Data))
 	if err != nil {
 		return nil, fmt.Errorf("failed to unmarshal data: %w", err)
 	}
 
-	secret, err := bankcard.NewSecret(dbSecret.ID, dbSecret.Name, dbSecret.UserID, metadata,
+	secret, err := credential.NewSecret(dbSecret.ID, dbSecret.Name, dbSecret.UserID, metadata,
 		dbSecret.CreatedAt, dbSecret.UpdatedAt, dbSecret.Version, data)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create bank card secret: %w", err)
+		return nil, fmt.Errorf("failed to create secret: %w", err)
 	}
 
 	return secret, nil
 }
 
-// ListSecrets returns a list of bank card secret entries from the storage.
-func (s *Storage) ListSecrets(ctx context.Context, userID string) ([]*bankcard.Secret, error) {
+// ListSecrets returns a list of credential secret entries from the storage.
+func (s *Storage) ListSecrets(ctx context.Context, userID string) ([]*credential.Secret, error) {
 	query := `SELECT id, name, user_id, created_at, updated_at, version, metadata
-			FROM vault_bankcards
+			FROM vault_credentials
 			WHERE user_id = $1`
 
 	rows, err := s.db.QueryContext(ctx, query, userID)
@@ -155,10 +156,10 @@ func (s *Storage) ListSecrets(ctx context.Context, userID string) ([]*bankcard.S
 	}
 	defer rows.Close()
 
-	var secrets []*bankcard.Secret
+	var secrets []*credential.Secret
 
 	for rows.Next() {
-		var dbSecret cardrepo.Secret
+		var dbSecret credrepo.Secret
 
 		if err := rows.Scan(&dbSecret.ID, &dbSecret.Name, &dbSecret.UserID, &dbSecret.CreatedAt,
 			&dbSecret.UpdatedAt, &dbSecret.Version, &dbSecret.Metadata); err != nil {
@@ -172,10 +173,10 @@ func (s *Storage) ListSecrets(ctx context.Context, userID string) ([]*bankcard.S
 			return nil, fmt.Errorf("failed to unmarshal metadata: %w", err)
 		}
 
-		secret, err := bankcard.NewSecret(dbSecret.ID, dbSecret.Name, dbSecret.UserID, metadata,
-			dbSecret.CreatedAt, dbSecret.UpdatedAt, dbSecret.Version, bankcard.NewEmptyData())
+		secret, err := credential.NewSecret(dbSecret.ID, dbSecret.Name, dbSecret.UserID, metadata,
+			dbSecret.CreatedAt, dbSecret.UpdatedAt, dbSecret.Version, credential.NewEmptyData())
 		if err != nil {
-			return nil, fmt.Errorf("failed to create bank card secret: %w", err)
+			return nil, fmt.Errorf("failed to create secret: %w", err)
 		}
 
 		secrets = append(secrets, secret)
@@ -188,8 +189,8 @@ func (s *Storage) ListSecrets(ctx context.Context, userID string) ([]*bankcard.S
 	return secrets, nil
 }
 
-// UpdateSecret updates a bank card secret entry in the storage.
-func (s *Storage) UpdateSecret(ctx context.Context, secret *bankcard.Secret) (*bankcard.Secret, error) {
+// UpdateSecret updates a credential secret entry in the storage.
+func (s *Storage) UpdateSecret(ctx context.Context, secret *credential.Secret) (*credential.Secret, error) {
 	metadata, err := secret.MetadataJSON()
 	if err != nil {
 		return nil, fmt.Errorf("failed to read metadata: %w", err)
@@ -200,7 +201,7 @@ func (s *Storage) UpdateSecret(ctx context.Context, secret *bankcard.Secret) (*b
 		return nil, fmt.Errorf("failed to read data: %w", err)
 	}
 
-	query := `UPDATE vault_bankcards
+	query := `UPDATE vault_credentials
 			SET updated_at = $1, version = $2, metadata = $3, data = $4
 			WHERE user_id = $5 AND name = $6`
 
@@ -217,9 +218,10 @@ func (s *Storage) UpdateSecret(ctx context.Context, secret *bankcard.Secret) (*b
 	return secr, nil
 }
 
-// DeleteSecret deletes a bank card secret entry from the storage.
+// DeleteSecret deletes a credential secret entry from the storage.
 func (s *Storage) DeleteSecret(ctx context.Context, userID, secretName string) error {
-	query := `DELETE FROM vault_bankcards WHERE user_id = $1 AND name = $2`
+	query := `DELETE FROM vault_credentials
+			WHERE user_id = $1 AND name = $2`
 
 	result, err := s.db.ExecContext(ctx, query, userID, secretName)
 	if err != nil {
@@ -232,7 +234,7 @@ func (s *Storage) DeleteSecret(ctx context.Context, userID, secretName string) e
 	}
 
 	if rowsAffected == 0 {
-		return cardrepo.ErrSecretNotFound
+		return credrepo.ErrSecretNotFound
 	}
 
 	return nil

@@ -83,6 +83,17 @@ func (s *HTTPServer) Serve() error {
 	return nil
 }
 
+// ServeTLS starts the HTTPS server using the provided TLS certificate and key files.
+func (s *HTTPServer) ServeTLS(certFile, keyFile string) error {
+	s.log.Info("Starting HTTPS server", slog.String("address", s.server.Addr))
+
+	if err := s.server.ListenAndServeTLS(certFile, keyFile); err != nil && err != http.ErrServerClosed {
+		return fmt.Errorf("server.ListenAndServeTLS: %w", err)
+	}
+
+	return nil
+}
+
 // Shutdown stops the HTTP server.
 func (s *HTTPServer) Shutdown(ctx context.Context) error {
 	s.log.Info("Shutting down HTTP server")

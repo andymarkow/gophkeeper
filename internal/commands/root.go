@@ -3,7 +3,6 @@ package commands
 
 import (
 	"fmt"
-	"time"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -57,8 +56,8 @@ func initFlags(cmd *cobra.Command) error {
 		return fmt.Errorf("viper.BindPFlag: %w", err)
 	}
 
-	cmd.PersistentFlags().Duration("cache-ttl", 5*time.Minute, "Cache TTL")
-	err = viper.BindPFlag("cache-ttl", cmd.PersistentFlags().Lookup("cache-ttl"))
+	cmd.PersistentFlags().String("cache-type", "inmemory", "Local cache type")
+	err = viper.BindPFlag("cache-type", cmd.PersistentFlags().Lookup("cache-type"))
 	if err != nil {
 		return fmt.Errorf("viper.BindPFlag: %w", err)
 	}

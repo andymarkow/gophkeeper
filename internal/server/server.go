@@ -40,6 +40,8 @@ import (
 type Server struct {
 	log     *slog.Logger
 	httpsrv *httpserver.HTTPServer
+	tlsCert string
+	tlsKey  string
 
 	userStorage userrepo.Storage
 	cardStorage cardrepo.Storage
@@ -120,6 +122,8 @@ func NewServer() (*Server, error) {
 	return &Server{
 		log:         logger,
 		httpsrv:     httpserver.NewHTTPServer(router, httpserver.WithLogger(logger)),
+		tlsCert:     cfg.TLSCert,
+		tlsKey:      cfg.TLSKey,
 		userStorage: userStorage,
 		cardStorage: cardStorage,
 		credStorage: credStorage,
@@ -132,8 +136,16 @@ func (s *Server) Run() error {
 	errgrp, ctx := errgroup.WithContext(context.Background())
 
 	errgrp.Go(func() error {
-		if err := s.httpsrv.Serve(); err != nil {
-			return fmt.Errorf("failed to start HTTP server: %w", err)
+		if s.tlsCert != "" && s.tlsKey != "" {
+			if err := s.httpsrv.ServeTLS(s.tlsCert, s.tlsKey); err != nil {
+				return fmt.Errorf("failed to start HTTPS server: %w", err)
+			}
+
+			return nil
+		} else {
+			if err := s.httpsrv.Serve(); err != nil {
+				return fmt.Errorf("failed to start HTTP server: %w", err)
+			}
 		}
 
 		return nil

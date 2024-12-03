@@ -21,6 +21,8 @@ import (
 	"github.com/andymarkow/gophkeeper/internal/storage/cardrepo"
 )
 
+var _ cardrepo.Storage = (*Storage)(nil)
+
 // Storage implements bank card storage.
 type Storage struct {
 	db  *sql.DB

@@ -6,28 +6,25 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"time"
 
 	"github.com/go-resty/resty/v2"
 
-	cache "github.com/andymarkow/gophkeeper/internal/cache/bankcard"
 	"github.com/andymarkow/gophkeeper/internal/client/apierr"
 	"github.com/andymarkow/gophkeeper/internal/domain/vault/bankcard"
+	"github.com/andymarkow/gophkeeper/internal/storage/cardrepo"
 )
 
 type Client struct {
-	log    *slog.Logger
-	client *resty.Client
-	cache  cache.Cache
-	ttl    time.Duration
+	log     *slog.Logger
+	client  *resty.Client
+	storage cardrepo.Storage
 }
 
-func NewClient(cache cache.Cache, opts ...Option) *Client {
+func NewClient(store cardrepo.Storage, opts ...Option) *Client {
 	client := &Client{
-		log:    slog.Default(),
-		client: resty.New(),
-		cache:  cache,
-		ttl:    time.Second * 600,
+		log:     slog.Default(),
+		client:  resty.New(),
+		storage: store,
 	}
 
 	for _, opt := range opts {
@@ -45,12 +42,6 @@ func WithLogger(l *slog.Logger) Option {
 	}
 }
 
-func WithCacheTTL(ttl time.Duration) Option {
-	return func(c *Client) {
-		c.ttl = ttl
-	}
-}
-
 // WithBaseURL sets the base URL for the user API client.
 func WithBaseURL(url string) Option {
 	return func(c *Client) {
@@ -65,12 +56,7 @@ func WithAuthToken(token string) Option {
 }
 
 func (c *Client) CreateSecret(ctx context.Context, secret *bankcard.Secret) error {
-	_, err := c.updateCacheItem(ctx, secret)
-	if err != nil {
-		c.log.Error("failed to update cache item", slog.Any("error", err))
-	}
-
-	_, err = c.DoCreateSecret(ctx, secret)
+	_, err := c.DoCreateSecret(ctx, secret)
 	if err != nil {
 		if errors.Is(err, ErrSecretAlreadyExists) {
 			return ErrSecretAlreadyExists
@@ -79,60 +65,40 @@ func (c *Client) CreateSecret(ctx context.Context, secret *bankcard.Secret) erro
 		return fmt.Errorf("failed to create secret: %w", err)
 	}
 
+	_, err = c.storage.AddSecret(ctx, secret)
+	if err != nil {
+		return fmt.Errorf("storage.AddSecret: %w", err)
+	}
+
 	return nil
 }
 
 func (c *Client) GetSecret(ctx context.Context, userID, secretName string) (*bankcard.Secret, error) {
-	item, err := c.cache.GetItem(ctx, userID, secretName)
-	if err != nil && errors.Is(err, cache.ErrItemNotFound) {
-		secret, err := c.processGetSecret(ctx, secretName)
-		if err != nil {
-			if errors.Is(err, ErrSecretNotFound) {
-				return nil, ErrSecretNotFound
-			}
-
-			return nil, fmt.Errorf("failed to get secret: %w", err)
-		}
-
-		return secret, nil
-	}
-	if err != nil {
-		return nil, fmt.Errorf("cache.GetItem: %w", err)
-	}
-
-	if item.Expired() {
-		secret, err := c.processGetSecret(ctx, secretName)
-		if err != nil {
-			if errors.Is(err, ErrSecretNotFound) {
-				return nil, ErrSecretNotFound
-			}
-
-			if apierr.IsConnError(err) {
-				return item.Secret(), nil
-			}
-
-			return nil, fmt.Errorf("failed to get secret: %w", err)
-		}
-
-		return secret, nil
-	}
-
-	return item.Secret(), nil
-}
-
-func (c *Client) processGetSecret(ctx context.Context, secretName string) (*bankcard.Secret, error) {
 	secret, err := c.DoGetSecret(ctx, secretName)
 	if err != nil {
 		if errors.Is(err, ErrSecretNotFound) {
 			return nil, ErrSecretNotFound
 		}
 
+		if apierr.IsConnError(err) {
+			secret, err := c.storage.GetSecret(ctx, userID, secretName)
+			if err != nil {
+				if errors.Is(err, cardrepo.ErrSecretNotFound) {
+					return nil, ErrSecretNotFound
+				}
+
+				return nil, fmt.Errorf("storage.GetSecret: %w", err)
+			}
+
+			return secret, nil
+		}
+
 		return nil, fmt.Errorf("client.DoGetSecret: %w", err)
 	}
 
-	_, err = c.updateCacheItem(ctx, secret)
+	_, err = c.storage.UpdateSecret(ctx, secret)
 	if err != nil {
-		c.log.Error("failed to update cache item", slog.Any("error", err))
+		return nil, fmt.Errorf("storage.UpdateSecret: %w", err)
 	}
 
 	return secret, nil
@@ -142,15 +108,9 @@ func (c *Client) ListSecrets(ctx context.Context, userID string) ([]*bankcard.Se
 	secrets, err := c.DoListSecrets(ctx)
 	if err != nil {
 		if apierr.IsConnError(err) {
-			items, err := c.cache.ListItems(ctx, userID)
+			secrets, err := c.storage.ListSecrets(ctx, userID)
 			if err != nil {
 				return nil, fmt.Errorf("cache.ListItems: %w", err)
-			}
-
-			var secrets []*bankcard.Secret
-
-			for _, item := range items {
-				secrets = append(secrets, item.Secret())
 			}
 
 			return secrets, nil
@@ -172,9 +132,9 @@ func (c *Client) UpdateSecret(ctx context.Context, secret *bankcard.Secret) erro
 		return fmt.Errorf("failed to update secret: %w", err)
 	}
 
-	_, err = c.updateCacheItem(ctx, updSecret)
+	_, err = c.storage.UpdateSecret(ctx, updSecret)
 	if err != nil {
-		c.log.Error("failed to update cache item", slog.Any("error", err))
+		return fmt.Errorf("storage.UpdateSecret: %w", err)
 	}
 
 	return nil
@@ -182,15 +142,15 @@ func (c *Client) UpdateSecret(ctx context.Context, secret *bankcard.Secret) erro
 
 func (c *Client) DeleteSecret(ctx context.Context, userID, secretName string) error {
 	defer func() {
-		err := c.cache.DeleteItem(ctx, userID, secretName)
+		err := c.storage.DeleteSecret(ctx, userID, secretName)
 		if err != nil {
-			if errors.Is(err, cache.ErrItemNotFound) {
-				c.log.Error("cache item not found", slog.String("secret", secretName))
+			if errors.Is(err, cardrepo.ErrSecretNotFound) {
+				c.log.Error("secret not found", slog.String("secret", secretName))
 
 				return
 			}
 
-			c.log.Error("failed to delete cache item", slog.Any("error", err))
+			c.log.Error("failed to delete secret", slog.Any("error", err))
 		}
 	}()
 
@@ -204,15 +164,4 @@ func (c *Client) DeleteSecret(ctx context.Context, userID, secretName string) er
 	}
 
 	return nil
-}
-
-func (c *Client) updateCacheItem(ctx context.Context, secret *bankcard.Secret) (*cache.Item, error) {
-	item := cache.NewItem(secret, time.Now().Add(c.ttl))
-
-	it, err := c.cache.SetItem(ctx, item)
-	if err != nil {
-		return nil, fmt.Errorf("cache.SetItem: %w", err)
-	}
-
-	return it, nil
 }

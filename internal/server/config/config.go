@@ -13,6 +13,8 @@ type Config struct {
 	LogLevel   string
 	JWTSecret  string
 	CryptoKey  string
+	TLSKey     string
+	TLSCert    string
 	ObjStorage *ObjectStorage
 	Database   *Database
 }
@@ -39,6 +41,8 @@ func NewConfig() (*Config, error) {
 		LogLevel:   viper.GetString("log-level"),
 		JWTSecret:  viper.GetString("jwt-secret"),
 		CryptoKey:  viper.GetString("crypto-key"),
+		TLSKey:     viper.GetString("tls-key"),
+		TLSCert:    viper.GetString("tls-cert"),
 		Database: &Database{
 			DSN: viper.GetString("db-dsn"),
 		},
@@ -60,6 +64,8 @@ func initConfig() error {
 	pflag.StringP("log-level", "l", "", "log level")
 	pflag.String("jwt-secret", "", "JWT secret used for token generation and verification")
 	pflag.String("crypto-key", "", "crypto key used for data encryption and decryption")
+	pflag.String("tls-key", "", "Server TLS key")
+	pflag.String("tls-cert", "", "Server TLS certificate")
 	pflag.String("db-dsn", "", "PostgreSQL database connection DSN")
 	pflag.String("s3-endpoint", "", "S3 object storage endpoint")
 	pflag.String("s3-access-key", "", "S3 object storage access key")
@@ -124,6 +130,14 @@ func bindEnvs() error {
 	}
 
 	if err := viper.BindEnv("crypto-key", "KEEPER_CRYPTO_KEY"); err != nil {
+		return fmt.Errorf("viper.BindEnv: %w", err)
+	}
+
+	if err := viper.BindEnv("tls-key", "KEEPER_TLS_KEY"); err != nil {
+		return fmt.Errorf("viper.BindEnv: %w", err)
+	}
+
+	if err := viper.BindEnv("tls-cert", "KEEPER_TLS_CERT"); err != nil {
 		return fmt.Errorf("viper.BindEnv: %w", err)
 	}
 

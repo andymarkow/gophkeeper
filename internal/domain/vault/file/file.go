@@ -2,6 +2,7 @@
 package file
 
 import (
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -105,6 +106,20 @@ func (s *Secret) UserID() string {
 // Metadata returns the metadata of the secret.
 func (s *Secret) Metadata() map[string]string {
 	return s.metadata
+}
+
+// MetadataJSON returns the metadata of the secret.
+func (s *Secret) MetadataJSON() ([]byte, error) {
+	if s.metadata == nil {
+		return nil, nil
+	}
+
+	metadata, err := json.Marshal(s.metadata)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal metadata: %w", err)
+	}
+
+	return metadata, nil
 }
 
 // SetMetadata adds metadata to the bank card secret.

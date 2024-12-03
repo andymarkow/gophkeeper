@@ -3,6 +3,7 @@ package cardapi
 import (
 	"context"
 	"fmt"
+	"log/slog"
 
 	"github.com/andymarkow/gophkeeper/internal/api/v1/secrets/bankcards"
 	"github.com/andymarkow/gophkeeper/internal/domain/vault/bankcard"
@@ -24,7 +25,7 @@ func (c *Client) DoCreateSecret(ctx context.Context, secret *bankcard.Secret) (*
 
 	resp, err := c.client.R().SetContext(ctx).
 		SetBody(body).
-		SetResult(result).
+		SetResult(&result).
 		Post("/api/v1/secrets/bankcards")
 	if err != nil {
 		return nil, fmt.Errorf("client.R.Post: %w", err)
@@ -34,6 +35,8 @@ func (c *Client) DoCreateSecret(ctx context.Context, secret *bankcard.Secret) (*
 		if resp.StatusCode() == 409 {
 			return nil, ErrSecretAlreadyExists
 		}
+
+		c.log.Error("failed to create secret", slog.Any("error", resp.Error()), slog.Any("isError", resp.IsError()))
 
 		return nil, fmt.Errorf("resp.IsError: %v", resp.Error())
 	}
@@ -163,7 +166,7 @@ func (c *Client) DoUpdateSecret(ctx context.Context, secret *bankcard.Secret) (*
 		SetPathParams(map[string]string{
 			"secretName": secret.Name(),
 		}).
-		SetResult(result).
+		SetResult(&result).
 		Put("/api/v1/secrets/bankcards/{secretName}")
 	if err != nil {
 		return nil, fmt.Errorf("client.R.Put: %w", err)
